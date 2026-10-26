@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-26",
+  "generator": "OpenAI image_gen",
+  "entries": [
+    {
+      "asset": "Portrait-operator",
+      "prompt": "Create a square original premium science fiction mobile game character dossier portrait. Lin Xi, a 28-year-old East Asian female tactical communications officer, dark brown shoulder-length bob, kind confident expression, elegant practical ivory and dark navy flight uniform with teal light strips, discreet headset microphone, no helmet, teal holographic command-room background. Semi-realistic AAA game concept art, exquisite painterly hard-surface detail, strong readable face silhouette at thumbnail size, cinematic rim light, restrained color grading, head and upper shoulders centered fully inside the frame, face takes up 55 percent of image, no text, no logos, no frame, no watermark, no existing franchise character. Opaque dark atmospheric background.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-08fd64b6-e499-4875-86a1-3f317677589b.png",
+      "format": "640px JPEG, sips quality 85"
+    },
+    {
+      "asset": "Portrait-enemy1",
+      "prompt": "Create a square original premium science fiction mobile game character dossier portrait. Han Chao, 46-year-old East Asian male naval commander, short black hair with grey temples, stubble and stern weathered face, dark navy plated command uniform, amber illuminated collar, stormy sea command deck background. Semi-realistic AAA game concept art, exquisite painterly hard-surface detail, strong readable face silhouette at thumbnail size, cinematic rim light, restrained color grading, head and upper shoulders centered fully inside the frame, face takes up 55 percent of image, no text, no logos, no frame, no watermark, no existing franchise character. Opaque dark atmospheric background.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-0e7f5b1c-e057-4a1e-9db7-068b055dfaff.png",
+      "format": "640px JPEG, sips quality 85"
+    },
+    {
+      "asset": "Portrait-enemy2",
+      "prompt": "Create a square original premium science fiction mobile game character dossier portrait. Vera, 34-year-old female logistics admiral, bronze skin, black slicked-back hair with one shaved side, angular confident face, dark plum armored high-collar uniform, orange neon harbor bridge background. Semi-realistic AAA game concept art, exquisite painterly hard-surface detail, strong readable face silhouette at thumbnail size, cinematic rim light, restrained color grading, head and upper shoulders centered fully inside the frame, face takes up 55 percent of image, no text, no logos, no frame, no watermark, no existing franchise character. Opaque dark atmospheric background.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-09ec6648-b87e-4af2-8303-578be8192a3e.png",
+      "format": "640px JPEG, sips quality 85"
+    },
+    {
+      "asset": "Portrait-enemy3",
+      "prompt": "Create a square original premium science fiction mobile game character dossier portrait. Oren, 52-year-old male engineer commander, dark brown skin, bald head, rectangular mechanics visor raised above eyes, worn sand-grey industrial armor with amber reactor lights, desert foundry background. Semi-realistic AAA game concept art, exquisite painterly hard-surface detail, strong readable face silhouette at thumbnail size, cinematic rim light, restrained color grading, head and upper shoulders centered fully inside the frame, face takes up 55 percent of image, no text, no logos, no frame, no watermark, no existing franchise character. Opaque dark atmospheric background.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-6d2b1b14-0364-4cc8-acb4-d341e60d6849.png",
+      "format": "640px JPEG, sips quality 85"
+    },
+    {
+      "asset": "Portrait-enemy4",
+      "prompt": "Create a square original premium science fiction mobile game character dossier portrait. Shen Shuang, 31-year-old East Asian female interceptor ace, silver-white short hair, serious reserved expression, white graphite flight armor with ice blue lights and a slim headset, aurora glacier hangar background. Semi-realistic AAA game concept art, exquisite painterly hard-surface detail, strong readable face silhouette at thumbnail size, cinematic rim light, restrained color grading, head and upper shoulders centered fully inside the frame, face takes up 55 percent of image, no text, no logos, no frame, no watermark, no existing franchise character. Opaque dark atmospheric background.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-0f7cac91-a5a7-4397-aa11-ce5d3b07728a.png",
+      "format": "640px JPEG, sips quality 85"
+    },
+    {
+      "asset": "Portrait-enemy5",
+      "prompt": "Create a square original premium science fiction mobile game character dossier portrait. Director Zero, an imposing original artificial intelligence humanoid command avatar, faceted ivory ceramic mask with no mouth and thin red eyes, charcoal angular armored shoulders, luminous gold circuit crown shaped like a broken halo, deep orbit command chamber background. Semi-realistic AAA game concept art, exquisite painterly hard-surface detail, strong readable face silhouette at thumbnail size, cinematic rim light, restrained color grading, head and upper shoulders centered fully inside the frame, face takes up 55 percent of image, no text, no logos, no frame, no watermark, no existing franchise character. Opaque dark atmospheric background.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-50136aeb-e646-474f-af7e-0ded3d3c0973.png",
+      "format": "640px JPEG, sips quality 85"
+    }
+  ]
+}

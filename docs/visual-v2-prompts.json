@@ -1,0 +1,37 @@
+{
+  "sprites": [
+    {
+      "name": "player",
+      "reference": true,
+      "prompt": "Transform the EXACT white-and-navy fighter aircraft in this reference image into one production-ready video game sprite. Preserve its broad swept wings, long sharp nose, twin rear cylindrical cyan engines, dark navy wing panels, pearl white titanium fuselage, dark glass cockpit and tiny orange panel markings. STRICT straight-down orthographic overhead view, aircraft nose perfectly toward the TOP of image, wings horizontal and symmetrical, zero camera tilt, no perspective foreshortening. Single isolated aircraft occupying 86% of square frame with 7% clear margin on all sides. Detailed PBR rendered 3D metallic hull, panel seams, rivets, physically shaded fuselage, crisp silhouette, subtle top-left light. No baked exhaust trail, no floor shadow, no ocean, no scenery, no UI, no writing, no logos. Real transparent alpha background. Actual usable gameplay asset, not a promotional illustration."
+    },
+    {
+      "name": "scout",
+      "prompt": "Production game sprite, one original enemy interceptor aircraft. STRICT orthographic overhead view looking straight down, nose points exactly UP. Compact menacing broad angular swept wings, gunmetal blue-black armor, crimson red identification panels, twin recessed red-orange rear exhaust nozzles, visible cockpit, panel seams, rivets, mechanical detail and top-left physical lighting, premium detailed 3D rendered arcade shoot-em-up art. Strong silhouette readable at 55 pixels. Isolated centered occupies 84% of square with 8% transparent margin; wings horizontal symmetric. No text, no insignia, no scenery, no baked exhaust trail or ground shadow. Transparent alpha background."
+    },
+    {
+      "name": "armored",
+      "prompt": "Production game sprite, one original heavy enemy assault gunship. STRICT straight-down orthographic overhead, nose toward TOP, zero camera angle. Broad stocky armored aircraft with dark olive and graphite metal segmented hull, two thick side nacelles, four missile pods, rust-red caution stripes, exposed vents and a central blue-black cockpit. Distinct from a thin fighter. Beautiful highly detailed PBR 3D rendered military sci-fi arcade game art, panel edges and bolts, soft top-left lighting. Single centered craft fills 84% of square with clear transparent margins all sides. No labels, no text, no scenery, no baked exhaust trail, no shadow below. Real alpha transparency."
+    },
+    {
+      "name": "boss",
+      "prompt": "Production-ready isolated sprite of an original enormous enemy airborne battle carrier. STRICT orthographic top-down view, front nose points TOP. Broad winged flying fortress with central elongated armored command hull, six chunky side weapon turrets, layered gunmetal and olive armor plating, rust-red navigation lights, orange heat vents, mechanical pipes, tiny service panels, large rear engine nacelles. Extremely detailed 3D rendered military science-fiction arcade shooter art, credible physical materials and dramatic subtle top-left shading. Readable imposing silhouette at 170 pixels. Single centered full craft occupies 88% of square with clear margin. No UI no labels no text no background no floor shadow no exhaust trails. Genuine transparent alpha."
+    },
+    {
+      "name": "obstacle",
+      "prompt": "Production-ready game terrain prop sprite: one small irregular rocky military outpost platform containing a tall armored radar tower with round dish, two antennas, yellow-black perimeter hazard stripes and a few pipes and utility crates. Strict orthographic top-down camera, looking vertically down, no horizon or isometric perspective. Original detailed premium 3D rendered arcade shooter game art, physically shaded dark grey concrete and olive gunmetal, weathered rock, believable panel detail. Single asymmetric compact island/platform footprint completely isolated, fills middle 82% of square, everything outside is genuine transparent alpha. No surrounding water, no rectangle base, no text, no label, no UI, no glowing energy blobs. This is a clearly visible solid obstacle for low-altitude aircraft."
+    },
+    {
+      "name": "CampaignMap",
+      "opaque": true,
+      "prompt": "Original premium military sci-fi arcade shooter LEVEL SELECT BACKGROUND. Portrait 1024x1536. An exquisitely detailed orthographic aerial campaign atlas of an irregular ocean archipelago. Organic asymmetrical geography, terrain spread across the WHOLE image including the center, no straight central river corridor and no symmetrical canyon sides. Bottom left a lush tropical island with a small airstrip, mid-right a sprawling industrial naval port, center-left a rust desert mesa with winding road and refinery, upper-right snowy mountainous island and research outpost, upper-center a remote circular fortified launch base. Smaller scattered islets, bridges, shipwrecks, roads, rocky coastlines, turquoise reefs, deep muted blue ocean. Realistic miniature 3D game-world diorama, rich terrain shading, slight atmospheric depth, restrained colors, crisp fine detail. Natural curved visual travel through the five regions, but DO NOT draw route lines or node circles; those are added interactively. NO text, numbers, letters, title, UI panels, borders, icons, aircraft, or watermarks. Avoid photo collage and map labels. Finished commercial-game-quality environment painting."
+    }
+  ],
+  "terrains": {
+    "ocean": "tropical archipelago, emerald jungle islands CUTTING ACROSS THE CENTER at different heights, curved turquoise shoals, diagonal bridge near upper third, central rocky island with weathered concrete airstrip, small boats and an abandoned frigate off-center, irregular coastlines",
+    "harbor": "industrial naval harbor, broad diagonal shipyard peninsula extending into CENTER, weathered drydocks, asymmetric crane piers, two detailed battleships across middle, warehouses, oil tanks, curved waterfront roads, narrow islands, dark teal sea",
+    "desert": "orange sandstone desert canyon, a WINDING S-shaped river and broken canyon shelves ACROSS CENTER, diagonal railway bridge, abandoned central radar base, scattered ruins, layered eroded rock, winding roads, sand drifts",
+    "glacier": "blue-white ice fjord, winding dark turquoise channel, huge asymmetric ice shelves and outcrops IN CENTER, diagonal steel bridge, detailed polar research station and submarine dock near middle, scattered icebergs at irregular distances",
+    "orbit": "dark orbital industrial zone, large asymmetrical space station sections and solar arrays ACROSS CENTER, broken carrier hull near middle, sparse scattered asteroids, detailed truss bridges and docking equipment, deep muted navy starfield, no bright nebula"
+  }
+}
