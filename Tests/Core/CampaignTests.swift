@@ -443,13 +443,13 @@ func ordinaryEnemiesTakeAtMostThreeHits(mission: Mission) throws {
                 #expect(hits <= 3)
                 #expect(!combat.entities.contains { $0.id == target.id })
                 if damage <= 11 {
-                    let expected = enemy.kind == .armored ? [1, 2, 2, 3, 3][mission.id - 1] : [1, 1, 2, 2, 3][mission.id - 1]
+                    let expected = enemy.kind.isHeavyAircraft ? [1, 2, 2, 3, 3][mission.id - 1] : [1, 1, 2, 2, 3][mission.id - 1]
                     #expect(hits == expected)
                 }
             }
         }
     }
-    #expect(kinds == (mission.id == 1 ? [.scout, .armored] : [.scout, .armored, .interceptor]))
+    #expect(kinds == Set(mission.waves.map(\.kind)))
 }
 
 @Test func weakShotsKeepTheirDamageAgainstBossesAndObstacles() throws {
@@ -663,4 +663,54 @@ func passedBossCannotStartLaserButExistingWarningsPersist(_ mission: Mission) {
     world.step(1.0 / 120)
     #expect(world.lanes.count == 1)
     #expect((world.lanes.first?.age ?? 0) > 1.0 / 120)
+}
+
+@Test func aircraftIntroductionsAndEncounterDensity() {
+    let expected: [Set<EntityKind>] = [
+        [.propeller, .scout, .gunship, .armored],
+        [.propeller, .scout, .gunship, .armored, .interceptor],
+        [.propeller, .scout, .gunship, .armored, .interceptor, .twinBoom],
+        [.propeller, .scout, .gunship, .armored, .interceptor, .twinBoom, .heavyGunship],
+        Set(EntityKind.aircraft)
+    ]
+    for mission in Mission.campaign {
+        #expect(Set(mission.waves.map(\.kind)) == expected[mission.id - 1])
+        #expect(mission.waves.allSatisfy { $0.kind.isRotorcraft ? $0.count <= 2 : $0.count <= 5 })
+    }
+    #expect(Mission.campaign[0].waves.prefix(2).allSatisfy { $0.kind != .gunship })
+    #expect(!Mission.campaign[0].groundForms.contains(.spider))
+    #expect(Mission.campaign[3].groundForms.contains(.spider))
+}
+
+@Test func unarmedFlightsAndHoverExitHaveDistinctBehavior() throws {
+    for kind in [EntityKind.propeller, .drone, .gunship, .twinBoom] {
+        var world = GameWorld(mission: Mission.campaign[0], loadout: Loadout())
+        var target = entity(kind, id: 900, at: Vector(x: 60, y: 500), hp: 1000)
+        target.fireAt = 0
+        target.age = 2.5
+        world.entities = [target]
+        world.step(0.01)
+        let shots = world.entities.filter { $0.kind == .hostile }
+        #expect(shots.count == (kind == .gunship ? 2 : kind == .twinBoom ? 3 : 0))
+        if kind == .twinBoom { #expect(shots.allSatisfy { abs($0.velocity.x) < 0.001 }) }
+        if kind == .gunship {
+            let index = try #require(world.entities.firstIndex { $0.id == 900 })
+            #expect(world.entities[index].velocity.y == -8)
+            world.entities[index].age = 5.1
+            world.step(0.01)
+            #expect(world.entities.first { $0.id == 900 }?.velocity.y == -86)
+        }
+    }
+}
+
+@Test func largeBossesSettleInsideThePlayableFrame() throws {
+    for mission in Mission.campaign {
+        var world = GameWorld(mission: mission, loadout: Loadout())
+        world.invincibleUntil = .infinity
+        world.elapsed = mission.bossTime
+        for _ in 0..<150 { world.step(1.0 / 30) }
+        let boss = try #require(world.boss)
+        #expect(boss.position.y <= world.length - (mission.axis == .vertical ? 165 : mission.id == 4 ? 125 : 90) + 0.001)
+        #expect(boss.position.y > world.player.y + 100)
+    }
 }

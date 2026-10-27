@@ -8,7 +8,7 @@ struct Wave: Sendable {
     let time: Double
     let formation: Formation
     let count: Int
-    let armored: Bool
+    let kind: EntityKind
 }
 
 struct Mission: Identifiable, Sendable {
@@ -36,27 +36,41 @@ struct Mission: Identifiable, Sendable {
     static let campaign: [Mission] = [
         Mission(id: 1, title: "碧潮群岛", subtitle: "TIDAL FRONTIER", axis: .vertical, biome: .ocean,
                 boss: "潮汐守卫", briefing: "穿越礁岛防线，接回 3 名失联飞行员。瞄准弹发射后再侧移，留一次 EMP 给守卫。",
-                firstClear: 300, bossTime: 94, waves: waves([.arrow, .sweep, .arrow, .weave, .sweep, .pincer, .arrow, .wall], spacing: 10, armorFrom: 6)),
+                firstClear: 300, bossTime: 94, waves: waves([.arrow, .sweep, .arrow, .weave, .sweep, .pincer, .arrow, .wall], kinds: [.propeller, .scout, .propeller, .gunship, .scout, .gunship, .armored, .propeller])),
         Mission(id: 2, title: "霓虹港湾", subtitle: "NEON BLOCKADE", axis: .horizontal, biome: .harbor,
                 boss: "港湾封锁者", briefing: "横向穿越夜港。上下移动引开追踪火力，看到红色通道时立即离开激光射线。",
-                firstClear: 400, bossTime: 104, waves: waves([.sweep, .pincer, .weave, .wall, .sweep, .weave, .pincer, .wall, .arrow], spacing: 10, armorFrom: 4)),
+                firstClear: 400, bossTime: 104, waves: waves([.sweep, .pincer, .weave, .wall, .sweep, .weave, .pincer, .wall, .arrow], kinds: [.scout, .propeller, .gunship, .interceptor, .scout, .gunship, .interceptor, .armored, .propeller])),
         Mission(id: 3, title: "赤砂熔谷", subtitle: "EMBER CANYON", axis: .vertical, biome: .desert,
                 boss: "沙暴巨像", briefing: "装甲编队需要持续输出。火力补给持续 8 秒，优先击破装甲机，穿过双扇形弹幕的空隙。",
-                firstClear: 500, bossTime: 114, waves: waves([.wall, .arrow, .pincer, .weave, .wall, .sweep, .pincer, .wall, .weave, .arrow], spacing: 10, armorFrom: 2)),
+                firstClear: 500, bossTime: 114, waves: waves([.wall, .arrow, .pincer, .weave, .wall, .sweep, .pincer, .wall, .weave, .arrow], kinds: [.propeller, .scout, .twinBoom, .gunship, .armored, .twinBoom, .interceptor, .armored, .gunship, .twinBoom])),
         Mission(id: 4, title: "极光裂隙", subtitle: "AURORA PASSAGE", axis: .horizontal, biome: .glacier,
                 boss: "霜翼", briefing: "在冰川间接回侦察队。小幅移动穿过旋转弹幕，避免被逼到边缘；救援能补充 EMP。",
-                firstClear: 600, bossTime: 124, waves: waves([.weave, .sweep, .pincer, .weave, .wall, .pincer, .sweep, .weave, .wall, .pincer, .arrow], spacing: 10, armorFrom: 3)),
+                firstClear: 600, bossTime: 124, waves: waves([.weave, .sweep, .pincer, .weave, .wall, .pincer, .sweep, .weave, .wall, .pincer, .arrow], kinds: [.scout, .gunship, .twinBoom, .heavyGunship, .interceptor, .armored, .heavyGunship, .twinBoom, .gunship, .interceptor, .propeller])),
         Mission(id: 5, title: "零点天穹", subtitle: "ZERO HORIZON", axis: .vertical, biome: .orbit,
                 boss: "零点核心", briefing: "突破轨道要塞。核心有三段火力：扇形、旋转、激光。救援与护盾留给最后的核心战。",
-                firstClear: 800, bossTime: 134, waves: waves([.arrow, .wall, .pincer, .weave, .sweep, .wall, .pincer, .weave, .wall, .pincer, .weave, .wall], spacing: 10, armorFrom: 1))
+                firstClear: 800, bossTime: 134, waves: waves([.arrow, .wall, .pincer, .weave, .sweep, .wall, .pincer, .weave, .wall, .pincer, .weave, .wall], kinds: [.propeller, .drone, .gunship, .twinBoom, .interceptor, .heavyGunship, .drone, .scout, .twinBoom, .drone, .heavyGunship, .armored]))
     ]
 
-    private static func waves(_ formations: [Formation], spacing: Double, armorFrom: Int) -> [Wave] {
-        formations.enumerated().map { index, formation in
-            Wave(time: 4 + Double(index) * spacing, formation: formation,
-                 count: index < 2 ? 3 : formation == .wall ? 5 : 4, armored: index >= armorFrom && index.isMultiple(of: 2))
+    private static func waves(_ formations: [Formation], kinds: [EntityKind]) -> [Wave] {
+        precondition(formations.count == kinds.count)
+        return formations.enumerated().map { index, formation in
+            let kind = kinds[index]
+            let count = kind.isRotorcraft ? (kind == .heavyGunship ? 1 : 2)
+                : index < 2 ? 3 : formation == .wall ? 5 : 4
+            return Wave(time: 4 + Double(index) * 10, formation: formation, count: count, kind: kind)
         }
     }
+
+    var groundForms: [GroundForm] {
+        switch id {
+        case 1: [.tank, .turret, .tank]
+        case 2: [.patrolBoat, .turret, .patrolBoat]
+        case 3: [.tank, .missileCarrier, .turret]
+        case 4: [.turret, .spider, .missileCarrier]
+        default: [.spider, .radar, .missileCarrier]
+        }
+    }
+
 }
 
 enum Upgrade: String, Codable, CaseIterable, Sendable {

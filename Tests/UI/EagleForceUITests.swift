@@ -299,6 +299,56 @@ final class EagleForceUITests: XCTestCase {
         XCTAssertTrue(surface.exists)
     }
 
+    @MainActor func testEnemySilhouettesAndLandmarks() {
+        for id in 1...5 {
+            let app = XCUIApplication()
+            app.launchArguments = ["-ui-testing", "-skip-intro", "-unlock-missions", "-shape-demo", "-mission", String(id)]
+            app.launch()
+            XCTAssertTrue(app.buttons["pause-button"].waitForExistence(timeout: 15))
+            let surface = app.descendants(matching: .any).matching(identifier: "battle-surface").firstMatch
+            expectation(for: NSPredicate(format: "value == %@", "3D projection aligned"), evaluatedWith: surface)
+            waitForExpectations(timeout: 10)
+            capture("shape-roster-\(id)")
+            app.terminate()
+        }
+    }
+
+    @MainActor func testGroundMuzzlesInBothFlightAxes() {
+        for id in [1, 2] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-ui-testing", "-skip-intro", "-unlock-missions", "-shape-demo", "-muzzle-demo", "-mission", String(id)]
+            app.launch()
+            let surface = app.descendants(matching: .any).matching(identifier: "battle-surface").firstMatch
+            expectation(for: NSPredicate(format: "value == %@", "3D projection aligned"), evaluatedWith: surface)
+            waitForExpectations(timeout: 15)
+            capture("muzzle-paths-\(id)")
+            app.terminate()
+        }
+    }
+
+    @MainActor func testModelTextureComparison() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-skip-intro", "-shape-demo", "-model-comparison", "-mission", "1"]
+        app.launch()
+        let surface = app.descendants(matching: .any).matching(identifier: "battle-surface").firstMatch
+        expectation(for: NSPredicate(format: "value == %@", "3D projection aligned"), evaluatedWith: surface)
+        waitForExpectations(timeout: 20)
+        capture("texture-matched-roster")
+    }
+
+    @MainActor func testSolidVehiclesAtObliqueAngles() {
+        for id in [1, 2] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-ui-testing", "-skip-intro", "-unlock-missions", "-shape-demo", "-volume-demo", "-mission", String(id)]
+            app.launch()
+            let surface = app.descendants(matching: .any).matching(identifier: "battle-surface").firstMatch
+            expectation(for: NSPredicate(format: "value == %@", "3D projection aligned"), evaluatedWith: surface)
+            waitForExpectations(timeout: 15)
+            capture("solid-oblique-\(id)")
+            app.terminate()
+        }
+    }
+
     @MainActor func testFiveBossModelsAndProjection() {
         for id in 1...5 {
             let app = XCUIApplication()

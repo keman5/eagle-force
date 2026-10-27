@@ -165,3 +165,63 @@ func escortsCapAtThreeRewardExtrasAndStayInBounds(_ mission: Mission) {
     delayed.update(world: world, delta: 30)
     #expect(!delayed.history.contains { $0.id.hasPrefix("weapon-") })
 }
+
+@Test(arguments: [Mission.campaign[0], Mission.campaign[1]])
+func wingHitsUseTheVisibleContourAndSweptProjectilePath(_ mission: Mission) throws {
+    for kind in [EntityKind.scout, .armored, .interceptor, .propeller, .twinBoom] {
+        let target = combatEntity(kind, id: 900, at: Vector(x: 150, y: 230), hp: 100)
+        let outline = target.hitOutline(mission: mission.id)
+        let wing = try #require(outline.max(by: { $0.x < $1.x }))
+        for style in [ProjectileStyle.cannon, .spread, .escort] {
+            var world = GameWorld(mission: mission, loadout: Loadout())
+            world.invincibleUntil = .infinity
+            let point = target.position + wing * 0.96
+            var shot = combatEntity(.bolt, id: 901, at: point + Vector(x: 0, y: -50))
+            shot.velocity = Vector(x: 0, y: 12_000); shot.damage = 11; shot.projectileStyle = style
+            world.entities = [target, shot]
+            world.step(1.0 / 120)
+            #expect(world.entities.first { $0.id == 900 }?.hp == 89)
+        }
+        let empty = target.position + Vector(x: wing.x + 15, y: 0)
+        #expect(!target.isHit(from: empty + Vector(x: 0, y: -50), to: empty + Vector(x: 0, y: 50), padding: 4, mission: mission.id))
+        // Empty space beside the narrow nose must not become a rectangular hitbox.
+        if kind == .armored {
+            let gap = target.position + Vector(x: 26, y: -25)
+            #expect(!target.isHit(from: gap, to: gap, padding: 2, mission: mission.id))
+        }
+    }
+}
+
+@Test(arguments: [Mission.campaign[0], Mission.campaign[1]])
+func laserReachesWingWithoutRequiringCenterAlignment(_ mission: Mission) throws {
+    var world = GameWorld(mission: mission, loadout: Loadout())
+    collect(.laser, in: &world)
+    let target = combatEntity(.armored, id: 900, at: world.player + Vector(x: 29, y: 120), hp: 100)
+    world.entities = [target]
+    world.step(1.0 / 120)
+    #expect(try #require(world.entities.first { $0.id == 900 }?.hp) < 100)
+}
+
+@Test(arguments: Mission.campaign)
+func groundRoundsLeaveTheirBarrelsAlongTheirAxes(_ mission: Mission) throws {
+    for form in GroundForm.allCases { for size in ObstacleSize.allCases {
+        for targetX in [100.0, 290.0] {
+            var world = GameWorld(mission: mission, loadout: Loadout())
+            world.player = Vector(x: targetX, y: 60)
+            var enemy = combatEntity(.obstacle, id: 900, at: Vector(x: 195, y: 260), hp: 1000)
+            enemy.groundForm = form; enemy.obstacleSize = size; enemy.fireAt = 0
+            world.entities = [enemy]
+            world.step(1.0 / 120)
+            let shots = world.entities.filter { $0.kind == .hostile }
+            #expect(shots.count == GroundWeaponLayout(form: form, size: size).volleyCount)
+            let layout = GroundWeaponLayout(form: form, size: size)
+            let muzzles = layout.muzzles(from: enemy.position, to: world.player)
+            let direction = Vector(x: 0, y: 1).rotated(layout.angle(from: enemy.position, to: world.player))
+            for (index, shot) in shots.enumerated() {
+                #expect((shot.position - muzzles[index % muzzles.count]).length < 0.001)
+                #expect((shot.velocity.unit - direction).length < 0.001)
+                #expect(direction.dot(world.player - shot.position) > 0)
+            }
+        }
+    } }
+}

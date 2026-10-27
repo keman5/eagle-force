@@ -19,13 +19,19 @@ struct Vector: Equatable, Sendable {
 enum EntityKind: String, Sendable {
     case scout, armored, interceptor, boss, bolt, hostile, crystal, rescue, repair, shield, power, obstacle
     case laser, spread, lightning, escort
-    var isEnemy: Bool { self == .scout || self == .armored || self == .interceptor || self == .boss }
+    case propeller, gunship, heavyGunship, twinBoom, drone
+    var isEnemy: Bool { Self.aircraft.contains(self) || self == .boss }
+    static let aircraft: [Self] = [.propeller, .scout, .gunship, .armored, .interceptor, .twinBoom, .heavyGunship, .drone]
+    var isRotorcraft: Bool { self == .gunship || self == .heavyGunship }
+    var isHeavyAircraft: Bool { self == .armored || self == .heavyGunship }
+    var canFire: Bool { self != .propeller && self != .drone && (isEnemy || self == .obstacle) }
     var isPickup: Bool { [.crystal, .rescue, .repair, .shield, .power, .laser, .spread, .lightning, .escort].contains(self) }
     var isSupply: Bool { isPickup && self != .crystal && self != .rescue }
     var radius: Double { switch self {
     case .obstacle: 32
     case .boss: 57
-    case .armored: 23
+    case .armored, .heavyGunship: 27
+    case .gunship, .twinBoom: 23
     case .scout, .interceptor: 18
     case .hostile: 5
     case .bolt: 4
@@ -44,6 +50,8 @@ enum PrimaryWeapon: String, CaseIterable, Sendable {
 }
 
 enum ProjectileStyle: Sendable { case cannon, spread, escort }
+
+enum GroundForm: String, CaseIterable, Sendable { case tank, turret, radar, patrolBoat, missileCarrier, spider }
 
 enum ObstacleSize: Int, CaseIterable, Sendable {
     case small, medium, large
@@ -66,8 +74,10 @@ struct Entity: Identifiable, Sendable {
     var damage = 0.0
     var projectileStyle: ProjectileStyle = .cannon
     var obstacleSize: ObstacleSize = .medium
+    var groundForm: GroundForm = .turret
     var lastHitAt = -Double.infinity
     var volleys = 0
+    var previousPosition: Vector?
     var radius: Double { kind == .obstacle ? obstacleSize.radius : kind.radius }
 }
 
@@ -232,15 +242,24 @@ struct GameWorld {
 
         var firing: [Entity] = []
         for index in entities.indices {
+            entities[index].previousPosition = entities[index].position
             entities[index].age += dt
             let kind = entities[index].kind
             if kind == .boss {
-                entities[index].position.y = max(length - (mission.axis == .vertical ? 125 : 80), entities[index].position.y - 90 * dt)
+                let inset = mission.axis == .vertical ? 165.0 : mission.id == 4 ? 125 : 90
+                entities[index].position.y = max(length - inset, entities[index].position.y - 90 * dt)
                 entities[index].position.x = width / 2 + sin(entities[index].age * 0.65) * (mission.axis == .vertical ? 102 : 150)
             } else {
                 let distance = (entities[index].position - player).length
                 if kind.isPickup && distance < max(kind == .rescue ? 130 : 0, loadout.pickupRadius * 2.5) {
                     entities[index].velocity = (player - entities[index].position).unit * min(560, distance / dt)
+                }
+                if kind.isRotorcraft {
+                    // Enter, hover for a readable volley, then leave instead of occupying the next wave.
+                    let hovering = entities[index].age >= 2 && entities[index].age < 5
+                    entities[index].velocity.y = (hovering ? -8 : -86) * flightScale
+                } else if kind == .drone && entities[index].age < 1.6 {
+                    entities[index].velocity = (player - entities[index].position).unit * 115 * flightScale
                 }
                 entities[index].position = entities[index].position + entities[index].velocity * dt
                 if let formation = entities[index].formation {
@@ -255,7 +274,7 @@ struct GameWorld {
                     entities[index].position.x = entities[index].originX + offset
                 }
             }
-            if (kind.isEnemy || kind == .obstacle) && entities[index].hp > 0 && entities[index].age >= entities[index].fireAt && entities[index].position.y < length - 35 && entities[index].position.y > player.y + (kind == .obstacle ? 40 : 0) {
+            if kind.canFire && entities[index].hp > 0 && entities[index].age >= entities[index].fireAt && entities[index].position.y < length - 35 && entities[index].position.y > player.y + (kind == .obstacle ? 40 : 0) {
                 let enemy = entities[index]
                 let interval: Double
                 if kind == .boss {
@@ -306,7 +325,7 @@ struct GameWorld {
            elapsed - lastWaveAt >= 8, aircraft.count <= 3 {
             let wave = mission.waves[nextWave]
             for index in 0..<wave.count {
-                let fraction = Double(index) / Double(max(1, wave.count - 1))
+                let fraction = wave.count == 1 ? [0.25, 0.75, 0.5][nextWave % 3] : Double(index) / Double(wave.count - 1)
                 let x: Double
                 let offset: Double
                 switch wave.formation {
@@ -316,13 +335,14 @@ struct GameWorld {
                 case .pincer: x = index.isMultiple(of: 2) ? 60 : 330; offset = Double(index / 2) * 100
                 }
                 let cross = mission.axis == .vertical ? x : width / 2 + (x - 195) * 1.25
-                let armored = wave.armored && index.isMultiple(of: 2)
-                let interceptor = !armored && mission.id >= 2 && nextWave >= 3 && index == wave.count - 1
-                let hits = min(3, (mission.id + 1 + (armored ? 1 : 0)) / 2)
-                add(armored ? .armored : interceptor ? .interceptor : .scout, at: Vector(x: cross, y: length + 12 + offset * flightScale),
-                    velocity: Vector(x: 0, y: (-(armored ? 55 : interceptor ? 110 : 70) - Double(mission.id) * 4) * flightScale),
+                let kind = wave.kind
+                let hits = min(3, (mission.id + 1 + (kind.isHeavyAircraft ? 1 : 0)) / 2)
+                let speed = kind == .interceptor ? 110.0 : kind.isHeavyAircraft ? 55 : 70
+                add(kind, at: Vector(x: cross, y: length + 12 + offset * flightScale),
+                    velocity: Vector(x: 0, y: (-speed - Double(mission.id) * 4) * flightScale),
                     hp: Double(hits) * 11,
-                    formation: wave.formation, motionPhase: 0)
+                    formation: kind == .drone ? nil : wave.formation, motionPhase: 0)
+
             }
             nextWave += 1
             lastWaveAt = elapsed
@@ -332,7 +352,7 @@ struct GameWorld {
             let positions = [136.0, 268.0, 181.0, 110.0]
             let x = positions[(obstacleIndex + mission.id - 1) % positions.count] * width / 390
             let size = ObstacleSize.allCases[(obstacleIndex + mission.id - 1) % 3]
-            add(.obstacle, at: Vector(x: x, y: length + 52), velocity: Vector(x: 0, y: -Self.groundSpeed), hp: size.durability, obstacleSize: size)
+            add(.obstacle, at: Vector(x: x, y: length + 52), velocity: Vector(x: 0, y: -Self.groundSpeed), hp: size.durability, obstacleSize: size, groundForm: mission.groundForms[obstacleIndex % mission.groundForms.count])
             obstacleIndex += 1
         }
         let rescueTimes = [18.0, 43.0, 70.0]
@@ -383,7 +403,7 @@ struct GameWorld {
             nextShot = elapsed + 0.12
             for index in entities.indices where isVisibleTarget(entities[index]) {
                 let target = entities[index]
-                if target.position.y + target.radius >= origin.y && abs(target.position.x - origin.x) < target.radius + 6 {
+                if target.isHit(from: origin, to: Vector(x: origin.x, y: length), padding: 6, mission: mission.id) {
                     entities[index].hp -= damage * 0.85
                     entities[index].lastHitAt = elapsed
                     effects.append(.impact(target.position))
@@ -425,12 +445,27 @@ struct GameWorld {
     private mutating func fire(_ enemy: Entity) {
         let aim = (player - enemy.position).unit
         if enemy.kind != .boss {
-            let count = enemy.kind == .armored ? 3 : enemy.kind == .interceptor ? 2
+            let count = enemy.kind.isHeavyAircraft ? 3 : enemy.kind == .twinBoom ? 3
+                : enemy.kind == .interceptor || enemy.kind == .gunship ? 2
                 : enemy.kind == .obstacle ? enemy.obstacleSize.rawValue + 1 : 1
+            if enemy.kind == .obstacle {
+                let layout = GroundWeaponLayout(form: enemy.groundForm, size: enemy.obstacleSize)
+                let angle = layout.angle(from: enemy.position, to: player)
+                let direction = Vector(x: 0, y: 1).rotated(angle)
+                let muzzles = layout.muzzles(from: enemy.position, to: player)
+                for index in 0..<layout.volleyCount {
+                    add(.hostile, at: muzzles[index % muzzles.count],
+                        velocity: direction * (90 + Double(mission.id) * 7) * flightScale * 1.5, damage: 18)
+                }
+                return
+            }
             for index in 0..<count {
                 let angle = atan2(aim.y, aim.x) + (Double(index) - Double(count - 1) / 2) * 0.18
-                add(.hostile, at: enemy.position + Vector(x: 0, y: -22),
-                    velocity: Vector(x: cos(angle), y: sin(angle)) * (90 + Double(mission.id) * 7) * flightScale * 1.5, damage: 18)
+                let straight = enemy.kind == .twinBoom
+                let origin = enemy.position + Vector(x: straight ? Double(index - 1) * 13 : 0, y: -22)
+                add(.hostile, at: origin,
+                    velocity: (straight ? Vector(x: 0, y: -1) : Vector(x: cos(angle), y: sin(angle)))
+                        * (90 + Double(mission.id) * 7) * flightScale * 1.5, damage: 18)
             }
             return
         }
@@ -456,7 +491,9 @@ struct GameWorld {
         let targets = entities.indices.filter { (entities[$0].kind.isEnemy || entities[$0].kind == .obstacle) && entities[$0].hp > 0 }
         for shot in entities.indices where entities[shot].kind == .bolt && entities[shot].hp > 0 {
             for enemy in targets where entities[enemy].hp > 0 {
-                if (entities[shot].position - entities[enemy].position).length < entities[enemy].radius + 5 {
+                let targetMotion = entities[enemy].position - (entities[enemy].previousPosition ?? entities[enemy].position)
+                let start = (entities[shot].previousPosition ?? entities[shot].position) + targetMotion
+                if entities[enemy].isHit(from: start, to: entities[shot].position, padding: entities[shot].radius, mission: mission.id) {
                     let target = entities[enemy].kind
                     let standardShot = entities[shot].projectileStyle == .cannon
                     let damage = standardShot && target.isEnemy && target != .boss ? max(11, entities[shot].damage) : entities[shot].damage
@@ -547,10 +584,10 @@ struct GameWorld {
                               rescued: rescued, healthFraction: min(1, max(0, health / loadout.maxHealth)), kills: kills)
     }
 
-    private mutating func add(_ kind: EntityKind, at position: Vector, velocity: Vector, hp: Double = 1, formation: Formation? = nil, motionPhase: Double = 0, damage: Double = 0, projectileStyle: ProjectileStyle = .cannon, obstacleSize: ObstacleSize = .medium) {
+    private mutating func add(_ kind: EntityKind, at position: Vector, velocity: Vector, hp: Double = 1, formation: Formation? = nil, motionPhase: Double = 0, damage: Double = 0, projectileStyle: ProjectileStyle = .cannon, obstacleSize: ObstacleSize = .medium, groundForm: GroundForm = .turret) {
         nextID += 1
         entities.append(Entity(id: nextID, kind: kind, position: position, velocity: velocity,
-                               hp: hp, maxHP: hp, originX: position.x, formation: formation, motionPhase: motionPhase, damage: damage, projectileStyle: projectileStyle, obstacleSize: obstacleSize))
+                               hp: hp, maxHP: hp, originX: position.x, formation: formation, motionPhase: motionPhase, damage: damage, projectileStyle: projectileStyle, obstacleSize: obstacleSize, groundForm: groundForm))
     }
 }
 

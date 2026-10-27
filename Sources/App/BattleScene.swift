@@ -87,6 +87,7 @@ final class BattleScene: SKScene {
     var validateProjection: (() -> Void)?
     private let testPilot = ProcessInfo.processInfo.arguments.contains("-ui-testing") && ProcessInfo.processInfo.arguments.contains("-autopilot")
     private let damageDemo = ProcessInfo.processInfo.arguments.contains("-ui-testing") && ProcessInfo.processInfo.arguments.contains("-damage-demo")
+    private let shapeDemo = ProcessInfo.processInfo.arguments.contains("-ui-testing") && ProcessInfo.processInfo.arguments.contains("-shape-demo")
     private var demoStage = 0
     private var demoCrashRequested = false
     #endif
@@ -108,6 +109,31 @@ final class BattleScene: SKScene {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-ui-testing"), ProcessInfo.processInfo.arguments.contains("-flight-demo") {
             world.player = Vector(x: mission.axis == .vertical ? 100 : 300, y: mission.axis == .vertical ? 250 : 95)
+        }
+        #endif
+        #if DEBUG
+        if shapeDemo {
+            world.elapsed = mission.id.isMultiple(of: 2) ? 50 : 24
+            world.invincibleUntil = .infinity
+            for (index, kind) in EntityKind.aircraft.enumerated() {
+                let point = Vector(x: world.width * (0.17 + Double(index % 4) * 0.22),
+                                   y: world.length * (index < 4 ? 0.82 : 0.68))
+                world.entities.append(Entity(id: 90_000 + index, kind: kind, position: point, velocity: .zero,
+                                             hp: 30, maxHP: 30, fireAt: .infinity, originX: point.x))
+            }
+            for (index, form) in GroundForm.allCases.enumerated() {
+                let point = Vector(x: world.width * (0.22 + Double(index % 3) * 0.28),
+                                   y: world.length * (index < 3 ? 0.48 : 0.31))
+                world.entities.append(Entity(id: 91_000 + index, kind: .obstacle, position: point, velocity: .zero,
+                                             hp: 88, maxHP: 88, fireAt: .infinity, originX: point.x, groundForm: form))
+            }
+        }
+        if shapeDemo, ProcessInfo.processInfo.arguments.contains("-muzzle-demo") {
+            world.player = Vector(x: world.width * 0.15, y: 45)
+            world.entities.removeAll { $0.kind != .obstacle }
+            for index in world.entities.indices { world.entities[index].fireAt = 0 }
+            for _ in 0..<12 { world.step(1.0 / 120) }
+            world.entities.removeAll { $0.kind != .obstacle && $0.kind != .hostile }
         }
         #endif
         reducedEffects = pilot.reducedEffects || UIAccessibility.isReduceMotionEnabled
@@ -136,6 +162,9 @@ final class BattleScene: SKScene {
         validateProjection?()
         #endif
         guard session?.paused == false, session?.result == nil else { lastTime = 0; return }
+        #if DEBUG
+        if shapeDemo { terrainScene?.update(world); return }
+        #endif
         if lastTime == 0 { lastTime = currentTime; return }
         let radioDelta = currentTime - lastTime
         let dt = min(radioDelta, 1.0 / 30)
