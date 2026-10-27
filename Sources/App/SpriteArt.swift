@@ -25,6 +25,15 @@ enum ModelArt {
         result.lightingModel = .physicallyBased
         result.metalness.contents = metal ? 0.65 : 0.1
         result.roughness.contents = metal ? 0.3 : 0.65
+        if metal && !glow {
+            let texture = UIImage(named: "Surface-metal")
+            assert(texture != nil)
+            result.name = "original-armor"
+            result.diffuse.contents = texture
+            result.multiply.contents = UIColor(hex: color)
+            result.diffuse.mipFilter = .linear
+            result.metalness.contents = 0.25; result.roughness.contents = 0.62
+        }
         if glow { result.emission.contents = UIColor(hex: color) }
         materials[key] = result
         return result
@@ -55,18 +64,92 @@ enum ModelArt {
         return part(shape, color, in: parent, metal: true)
     }
 
+    static func rockMaterial(_ tint: UInt32) -> SCNMaterial {
+        let key = "rock-\(tint)"
+        if let cached = materials[key] { return cached }
+        let result = SCNMaterial()
+        let artwork = UIImage(named: "Surface-rock")
+        assert(artwork != nil)
+        result.diffuse.contents = artwork
+        result.diffuse.wrapS = .repeat; result.diffuse.wrapT = .repeat
+        result.diffuse.mipFilter = .linear
+        result.multiply.contents = UIColor(hex: tint)
+        result.lightingModel = .physicallyBased
+        result.roughness.contents = 0.9; result.metalness.contents = 0
+        materials[key] = result
+        return result
+    }
+
+    private static var rocks: [Int: SCNGeometry] = [:]
+
+    static func rock(seed: Int, tint: UInt32) -> SCNNode {
+        let variant = seed % 7
+        let geometry: SCNGeometry
+        if let cached = rocks[variant] { geometry = cached.copy() as! SCNGeometry }
+        else {
+            let columns = 24, rows = 12
+            var vertices = [SCNVector3(0, 0, 39)]
+            for row in 1..<rows {
+                let latitude = Double(row) / Double(rows) * .pi
+                for column in 0..<columns {
+                    let angle = Double(column) / Double(columns) * .pi * 2
+                    let ridges = 1 + sin(angle * 3 + Double(variant)) * sin(latitude) * 0.18
+                        + cos(angle * 5 - latitude * 4 + Double(variant)) * 0.09
+                    vertices.append(SCNVector3(cos(angle) * sin(latitude) * ridges * 32,
+                                              sin(angle) * sin(latitude) * ridges * 43,
+                                              cos(latitude) * 34 + 5))
+                }
+            }
+            let bottom = Int32(vertices.count); vertices.append(SCNVector3(0, 0, -29))
+            var indices: [Int32] = []
+            for column in 0..<columns {
+                let a = Int32(1 + column), b = Int32(1 + (column + 1) % columns)
+                indices += [0, a, b]
+                for row in 0..<rows - 2 {
+                    let c = a + Int32(row * columns), d = b + Int32(row * columns)
+                    indices += [c, c + Int32(columns), d, d, c + Int32(columns), d + Int32(columns)]
+                }
+                let offset = Int32((rows - 2) * columns)
+                indices += [a + offset, bottom, b + offset]
+            }
+            let uv = vertices.map { CGPoint(x: Double($0.x) / 85 + 0.5, y: Double($0.y) / 100 + 0.5) }
+            geometry = mesh(vertices, uv: uv, indices: indices)
+            rocks[variant] = geometry.copy() as? SCNGeometry
+        }
+        geometry.materials = [rockMaterial(tint)]
+        return SCNNode(geometry: geometry)
+    }
+
+    static func mesh(_ vertices: [SCNVector3], uv: [CGPoint], indices: [Int32]) -> SCNGeometry {
+        assert(vertices.count == uv.count && indices.count.isMultiple(of: 3))
+        assert(vertices.allSatisfy { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite })
+        assert(indices.allSatisfy { $0 >= 0 && Int($0) < vertices.count })
+        var normals = Array(repeating: SIMD3<Float>.zero, count: vertices.count)
+        for face in stride(from: 0, to: indices.count, by: 3) {
+            let a = Int(indices[face]), b = Int(indices[face + 1]), c = Int(indices[face + 2])
+            let normal = simd_cross(SIMD3<Float>(vertices[b]) - SIMD3<Float>(vertices[a]),
+                                    SIMD3<Float>(vertices[c]) - SIMD3<Float>(vertices[a]))
+            normals[a] += normal; normals[b] += normal; normals[c] += normal
+        }
+        assert(normals.allSatisfy { simd_length_squared($0) > 0 })
+        return SCNGeometry(sources: [.init(vertices: vertices),
+                                     .init(normals: normals.map { SCNVector3(simd_normalize($0)) }),
+                                     .init(textureCoordinates: uv)],
+                           elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)])
+    }
+
     static func island(seed: Int, color: UInt32, shore: UInt32 = 0xAD9E7A) -> SCNNode {
         let sectors = 64
-        let radii: [Float] = [0.01, 0.16, 0.32, 0.48, 0.64, 0.78, 0.87, 0.94, 1]
+        let radii: [Float] = [0.01, 0.16, 0.32, 0.48, 0.64, 0.78, 0.87, 0.98, 1]
         var rings: [[SIMD3<Float>]] = []
         for (band, radius) in radii.enumerated() {
             rings.append((0..<sectors).map { sector in
                 let angle = Float(sector) / Float(sectors) * .pi * 2
                 let noise = 1 + sin(angle * 3 + Float(seed)) * 0.19 + cos(angle * 5 - Float(seed)) * 0.11
                 let elevation: Float = [44, 41, 35, 28, 20, 11, 4, 0, -5][band]
-                return SIMD3(cos(angle) * radius * noise * 59,
-                             sin(angle) * radius * noise * 92,
-                             elevation + (band < 6 ? sin(angle * 4 + Float(seed)) * radius * (1 - radius) * 20 : 0))
+                let x = cos(angle) * radius * noise * 59, y = sin(angle) * radius * noise * 92
+                let crags = sin(x * 0.17 + Float(seed)) * cos(y * 0.12) * 9 * (1 - radius)
+                return SIMD3(x, y, elevation + (band < 6 ? crags + sin(angle * 4 + Float(seed)) * radius * (1 - radius) * 20 : 0))
             })
         }
         var vertices: [SCNVector3] = [], normals: [SCNVector3] = []
@@ -92,12 +175,44 @@ enum ModelArt {
             sharedNormals[SIMD3<Float>(point), default: .zero] += SIMD3<Float>(normal)
         }
         normals = vertices.map { SCNVector3(simd_normalize(sharedNormals[SIMD3<Float>($0)]!)) }
-        let mesh = SCNGeometry(sources: [.init(vertices: vertices), .init(normals: normals)], elements: elements)
-        mesh.materials = (0..<radii.count - 1).map { material($0 == radii.count - 2 ? shore : color) }
+        let uv = vertices.map { CGPoint(x: Double($0.x) / 118 + 0.5, y: Double($0.y) / 184 + 0.5) }
+        let mesh = SCNGeometry(sources: [.init(vertices: vertices), .init(normals: normals), .init(textureCoordinates: uv)], elements: elements)
+        let land = rockMaterial(color)
+        let coast = rockMaterial(shore)
+        mesh.materials = (0..<radii.count - 1).map { $0 == radii.count - 2 ? coast : land }
         return SCNNode(geometry: mesh)
     }
 
+    private static var coastGeometry: SCNGeometry?
+
+    static func coastalIsland() -> SCNNode {
+        if let coastGeometry { return SCNNode(geometry: coastGeometry) }
+        let divisions = 32
+        var vertices: [SCNVector3] = [], uv: [CGPoint] = [], indices: [Int32] = []
+        for row in 0...divisions { for column in 0...divisions {
+            let u = Double(column) / Double(divisions), v = Double(row) / Double(divisions)
+            let ridge = exp(-pow((u - 0.5) / 0.19, 2)) * pow(sin(v * .pi), 2)
+            vertices.append(SCNVector3((u - 0.5) * 190, (v - 0.5) * 245, 2 + ridge * 36))
+            uv.append(CGPoint(x: u, y: 1 - v))
+        } }
+        for row in 0..<divisions { for column in 0..<divisions {
+            let a = Int32(row * (divisions + 1) + column), b = a + Int32(divisions + 1)
+            indices += [a, a + 1, b, a + 1, b + 1, b]
+        } }
+        let geometry = mesh(vertices, uv: uv, indices: indices)
+        let material = SCNMaterial()
+        let artwork = UIImage(named: "Island-v16"); assert(artwork != nil)
+        material.diffuse.contents = artwork; material.diffuse.mipFilter = .linear
+        material.lightingModel = .physicallyBased; material.roughness.contents = 1.0
+        material.multiply.contents = UIColor(hex: 0x83939F)
+        material.shaderModifiers = [.fragment: "#pragma body\nif (_output.color.a < 0.05) discard_fragment();"]
+        geometry.materials = [material]
+        coastGeometry = geometry
+        return SCNNode(geometry: geometry)
+    }
+
     private static var airframes: [String: SCNGeometry] = [:]
+    private static let modelSpans: [String: Double] = ["player": 60, "scout": 44, "armored": 64, "interceptor": 48, "boss": 146, "pilot": 34, "supply": 28, "tank": 74, "turret": 76]
 
     // Traced in the original 1254px artwork; UVs and relief share these coordinates.
     private static func referenceAirframe(_ design: String) -> SCNGeometry {
@@ -105,26 +220,53 @@ enum ModelArt {
         let half: [(Double, Double)]
         switch design {
         case "player":
-            half = [(627, 44), (595, 182), (565, 284), (531, 354), (536, 441),
-                    (502, 504), (475, 568), (373, 669), (243, 764), (145, 850),
-                    (72, 799), (40, 905), (85, 983), (100, 1038), (135, 1002),
-                    (375, 1038), (393, 1090), (430, 1063), (450, 1153),
-                    (563, 1167), (600, 1138), (627, 1170)]
+            half = [(627, 98), (596, 99), (574, 120), (537, 188), (519, 244),
+                    (508, 303), (495, 303), (478, 254), (457, 230), (399, 227),
+                    (376, 246), (337, 329), (326, 387), (127, 486), (115, 422),
+                    (112, 351), (73, 351), (65, 423), (48, 426), (9, 648),
+                    (10, 676), (283, 834), (299, 829), (305, 850), (327, 885),
+                    (234, 974), (211, 1124), (228, 1138), (352, 1062), (356, 1015),
+                    (388, 1027), (421, 1027), (444, 1015), (475, 976), (490, 939),
+                    (499, 944), (520, 1019), (540, 1038), (627, 1038)]
         case "scout":
-            half = [(627, 25), (563, 226), (573, 254), (545, 351), (512, 374),
-                    (480, 486), (166, 756), (145, 542), (129, 535), (110, 732),
-                    (63, 799), (25, 994), (143, 940), (327, 873), (369, 910),
-                    (296, 1067), (289, 1131), (430, 1048), (473, 1164),
-                    (504, 1210), (548, 1102), (605, 1085), (627, 1120)]
+            half = [(627, 36), (597, 43), (565, 96), (536, 173), (515, 307),
+                    (453, 378), (371, 409), (354, 350), (350, 250), (322, 244),
+                    (313, 347), (291, 367), (279, 453), (22, 607), (15, 735),
+                    (393, 780), (483, 820), (505, 901), (337, 1014), (320, 976),
+                    (295, 1006), (296, 1153), (317, 1170), (338, 1144),
+                    (533, 1111), (557, 1080), (562, 1122), (592, 1154), (627, 1158)]
         case "armored":
-            half = [(627, 30), (587, 42), (531, 195), (510, 211), (490, 329),
-                    (453, 286), (435, 245), (368, 232), (322, 277), (321, 386),
-                    (350, 426), (349, 480), (261, 511), (232, 410), (188, 371),
-                    (129, 388), (84, 465), (38, 634), (38, 812), (73, 908),
-                    (129, 946), (208, 946), (253, 899), (273, 749), (321, 742),
-                    (294, 810), (307, 886), (376, 930), (348, 968), (350, 1133),
-                    (422, 1207), (455, 1191), (493, 1158), (552, 1174),
-                    (582, 1087), (627, 1088)]
+            half = [(627, 75), (615, 116), (587, 135), (554, 203), (522, 238),
+                    (532, 270), (510, 339), (475, 380), (464, 318), (441, 293),
+                    (381, 293), (363, 319), (344, 414), (288, 438), (272, 359),
+                    (250, 336), (191, 335), (171, 364), (154, 461), (50, 516),
+                    (18, 552), (15, 627), (54, 669), (371, 794), (447, 849),
+                    (489, 842), (508, 875), (517, 945), (374, 996), (365, 934),
+                    (346, 897), (330, 918), (295, 980), (295, 1090), (332, 1153),
+                    (351, 1160), (372, 1097), (556, 1119), (591, 1115), (627, 1158)]
+        case "interceptor":
+            half = [(627, 5), (581, 136), (529, 350), (536, 397), (455, 489),
+                    (157, 725), (129, 675), (133, 615), (117, 582), (139, 466),
+                    (126, 463), (92, 579), (78, 588), (7, 834), (21, 870),
+                    (75, 841), (363, 973), (384, 898), (403, 995), (448, 1018),
+                    (493, 1004), (531, 951), (549, 980), (402, 1102), (374, 1232),
+                    (558, 1146), (591, 1117), (614, 1183), (627, 1185)]
+        case "supply":
+            half = [(627, 142), (556, 122), (389, 123), (340, 103), (211, 114),
+                    (90, 223), (82, 352), (106, 420), (106, 835), (83, 891),
+                    (85, 1019), (207, 1138), (337, 1145), (383, 1127), (627, 1127)]
+        case "pilot": half = []
+        case "tank":
+            half = [(627, 61), (607, 64), (603, 288), (481, 290), (461, 267),
+                    (440, 242), (318, 244), (283, 273), (268, 323), (267, 1117),
+                    (291, 1159), (416, 1166), (455, 1120), (486, 1144), (541, 1152),
+                    (572, 1167), (627, 1168)]
+        case "turret":
+            half = [(627, 370), (582, 370), (576, 48), (562, 24), (539, 23),
+                    (523, 44), (524, 117), (518, 283), (516, 366), (497, 367),
+                    (475, 391), (405, 427), (354, 419), (278, 485), (206, 648),
+                    (180, 695), (176, 871), (204, 918), (217, 995), (340, 1158),
+                    (373, 1144), (495, 1212), (511, 1230), (627, 1232)]
         default:
             half = [(627, 13), (596, 39), (561, 111), (544, 156), (522, 170),
                     (495, 252), (515, 307), (449, 367), (344, 373), (320, 421),
@@ -135,7 +277,17 @@ enum ModelArt {
                     (395, 1191), (458, 1197), (504, 1150), (540, 1200),
                     (592, 1212), (627, 1231)]
         }
-        let outline = half + half.dropFirst().dropLast().reversed().map { (1254 - $0.0, $0.1) }
+        let outline: [(Double, Double)] = design == "pilot"
+            ? [(628, 281), (576, 296), (527, 354), (511, 398), (374, 351), (283, 286),
+               (271, 194), (251, 189), (236, 231), (183, 169), (169, 177), (124, 218),
+               (119, 248), (211, 332), (265, 418), (419, 503), (477, 546), (467, 626),
+               (482, 695), (469, 739), (492, 853), (474, 916), (493, 950), (526, 948),
+               (565, 909), (584, 813), (616, 770), (653, 778), (688, 869), (711, 958),
+               (747, 972), (782, 958), (785, 903), (768, 857), (798, 790), (792, 692),
+               (806, 588), (912, 646), (1004, 683), (1041, 749), (1060, 755), (1061, 722),
+               (1116, 752), (1130, 738), (1128, 708), (1090, 670), (1016, 632),
+               (935, 526), (833, 438), (778, 416), (749, 339), (701, 300)]
+            : half + half.dropFirst().dropLast().reversed().map { (1254 - $0.0, $0.1) }
         let edge = outline.map { SIMD2<Double>($0.0, $0.1) }
         // Ear clipping preserves concave wing tips, engine gaps and gun barrels.
         func cross(_ a: SIMD2<Double>, _ b: SIMD2<Double>, _ c: SIMD2<Double>) -> Double {
@@ -159,7 +311,7 @@ enum ModelArt {
             precondition(clipped, "Aircraft outline must be a simple polygon")
         }
         faces.append((remaining[0], remaining[1], remaining[2]))
-        let span = design == "boss" ? 146.0 : design == "scout" ? 54.0 : design == "armored" ? 67.0 : 74.0
+        let span = modelSpans[design]!
         var vertices: [SCNVector3] = [], uv: [CGPoint] = []
         var vertexIDs: [String: Int32] = [:]
         func vertex(_ p: SIMD2<Double>, underside: Bool = false) -> Int32 {
@@ -177,9 +329,10 @@ enum ModelArt {
             }
             let cockpit = dome(0, 0.16, 0.045, 0.15) * 7
             let spine = dome(0, 0.02, 0.075, 0.40) * 4
-            let engineX = design == "armored" ? 0.35 : design == "boss" ? 0.17 : 0.095
+            let engineX = design == "armored" ? 0.35 : design == "boss" ? 0.17 : design == "player" ? 0.17 : 0.095
             let engines = (dome(-engineX, -0.24, 0.055, 0.20) + dome(engineX, -0.24, 0.055, 0.20)) * 6
-            let height = underside ? -2.5 : 1.5 + (cockpit + spine + engines) * min(1, edgeDistance / 40)
+            let relief = design == "supply" ? 12 : design == "pilot" ? dome(0, 0.17, 0.10, 0.12) * 16 + 4 : cockpit + spine + engines
+            let height = underside ? -2.5 : 1.5 + relief * min(1, edgeDistance / 40)
             let index = Int32(vertices.count)
             vertices.append(SCNVector3(x * span, y * span, height * span / 74))
             uv.append(CGPoint(x: p.x / 1254, y: p.y / 1254))
@@ -221,13 +374,16 @@ enum ModelArt {
                                             .init(textureCoordinates: uv)],
                                    elements: [top, sides, bottom].map { SCNGeometryElement(indices: $0, primitiveType: .triangles) })
         let paint = SCNMaterial()
-        let artwork = UIImage(named: "Ship-\(design)")
+        let asset = design == "tank" ? "Tank-v16" : design == "turret" ? "Turret-v16"
+            : design == "pilot" ? "Pilot-v16" : design == "supply" ? "Supply-v16"
+            : design == "player" ? "Ship-player-v15" : design == "boss" ? "Ship-boss" : "Ship-\(design)-v16"
+        let artwork = UIImage(named: asset)
         assert(artwork != nil, "Missing original aircraft texture")
         paint.diffuse.contents = artwork
         paint.lightingModel = .physicallyBased
-        paint.metalness.contents = 0.18
-        paint.roughness.contents = 0.55
-        paint.emission.contents = artwork; paint.emission.intensity = 0.10
+        paint.metalness.contents = 0.12
+        paint.roughness.contents = 0.65
+        paint.emission.contents = artwork; paint.emission.intensity = 0.03
         paint.diffuse.mipFilter = .linear
         let edgeMaterial = material(design == "player" ? 0x627785 : 0x30373D, metal: true)
         geometry.materials = [paint, edgeMaterial, edgeMaterial]
@@ -242,10 +398,11 @@ enum ModelArt {
         body.name = "airframe"; root.addChildNode(body)
         let boss = kind == .boss
         let accent: UInt32 = kind == nil ? cyan : [0xFF704B, 0xE26BFF, 0xFFB64F, 0x7BBEFF, 0xFF466D][(mission - 1) % 5]
-        let span: Double = boss ? 146 : kind == .scout ? 54 : kind == .armored ? 67 : 74
-        let engineX = kind == .armored ? 0.35 : boss ? 0.17 : 0.095
-        for side in [-1.0, 1.0] {
-            let x = side * engineX * span, y = -(kind == .armored ? 0.26 : 0.43) * span
+        let span = modelSpans[design]!
+        let engineX = kind == .armored ? 0.35 : boss || kind == nil ? 0.17 : 0.095
+        let engineSides = kind == .scout ? [0.0] : kind == .armored ? [-1.0, -0.53, 0.53, 1.0] : [-1.0, 1.0]
+        for side in engineSides {
+            let x = side * engineX * span, y = -(kind == .armored ? 0.02 : kind == nil ? 0.30 : 0.43) * span
             let nozzle = part(SCNCylinder(radius: CGFloat(span * 0.027), height: 2), 0x253D4A,
                               in: body, at: SCNVector3(x, y, 2), metal: true)
             nozzle.geometry?.firstMaterial = material(0x516571, metal: true)
@@ -253,6 +410,18 @@ enum ModelArt {
             flame.radialSegmentCount = 16
             let engine = part(flame, accent, in: body, at: SCNVector3(x, y - span * 0.08, 2), glow: true)
             engine.name = "engine"
+            let core = part(SCNCone(topRadius: CGFloat(span * 0.012), bottomRadius: 0, height: CGFloat(span * 0.12)),
+                            0xFFF7E3, in: engine, at: SCNVector3(0, span * 0.025, 1), glow: true)
+            core.castsShadow = false; engine.castsShadow = false
+        }
+        if kind == nil {
+            for side in [-1.0, 1.0] {
+                let x = side * span * (kind == nil ? 0.37 : 0.28)
+                let gun = part(SCNCylinder(radius: 0.85, height: span * 0.22), 0x73848A,
+                               in: body, at: SCNVector3(x, span * 0.05, 4), metal: true)
+                gun.geometry?.firstMaterial = material(0x73848A, metal: true)
+                box(2.2, 2.2, 1, kind == nil ? cyan : orange, in: body, at: SCNVector3(x, -span * 0.15, 5), glow: true)
+            }
         }
         if boss {
             // The six-turret carrier keeps its reference silhouette; mission equipment sits above it.
@@ -282,28 +451,64 @@ enum ModelArt {
                 ring.eulerAngles.x = .pi / 2
                 part(SCNSphere(radius: 6), accent, in: body, at: SCNVector3(0, 0, 17), glow: true)
             }
+            let plating: UInt32 = [0x637E83, 0x62657C, 0xA28B62, 0xA3CEDD, 0x53536F][(mission - 1) % 5]
+            for side in [-1.0, 1.0] {
+                let plate = hull([(0, 24), (side * 19, 14), (side * 23, -18), (0, -27)], depth: 5, color: plating, in: body)
+                plate.position = SCNVector3(side * (mission == 4 ? 42 : 28), -12, 8)
+                for row in 0..<5 {
+                    box(mission == 3 ? 15 : 8, 1.1, 1, 0x27343B, in: body,
+                        at: SCNVector3(side * 34, Double(row * 5 - 20), 14))
+                }
+                if mission == 1 || mission == 3 {
+                    let pod = part(SCNCapsule(capRadius: mission == 3 ? 8 : 5, height: 58), plating,
+                                   in: body, at: SCNVector3(side * 58, -10, 5), metal: true)
+                    pod.name = "armor-pod"
+                    box(3, 20, 2, accent, in: pod, at: SCNVector3(0, 0, 8), glow: true)
+                }
+                if mission == 2 {
+                    for gun in [-1.0, 1.0] {
+                        part(SCNCylinder(radius: 2.5, height: 41), 0x919DA6, in: body,
+                             at: SCNVector3(side * 26 + gun * 4, 35, 10), metal: true)
+                    }
+                }
+            }
+            let reactor = part(SCNSphere(radius: mission == 5 ? 9 : 4), accent, in: body,
+                               at: SCNVector3(0, mission == 5 ? 0 : 12, 18), glow: true)
+            reactor.name = "reactor"
         }
         return root
     }
 
     static func groundUnit(_ size: ObstacleSize) -> SCNNode {
         let root = SCNNode()
+        if size != .large {
+            let mount = SCNNode(); mount.name = "turret"; root.addChildNode(mount)
+            let body = SCNNode(geometry: referenceAirframe(size == .small ? "tank" : "turret"))
+            body.name = "authored-prop"; mount.addChildNode(body)
+            return root
+        }
         let r = CGFloat(size.radius)
         box(r * 1.5, r * 1.6, 9, 0x45545A, in: root)
         let turret = SCNNode(); turret.name = "turret"; root.addChildNode(turret)
-        if size == .small {
-            for x in [-r * 0.66, r * 0.66] { box(9, r * 1.8, 12, 0x222E32, in: root, at: SCNVector3(Float(x), 0, 1)) }
-            box(22, 24, 15, 0x86927B, in: turret, at: SCNVector3(0, 0, 9))
-            box(5, 34, 5, 0xB5BBA1, in: turret, at: SCNVector3(0, 20, 15))
-        } else if size == .medium {
-            let drum = part(SCNCylinder(radius: 22, height: 16), 0x747D7C, in: turret, at: SCNVector3(0, 0, 12))
-            drum.eulerAngles.x = .pi / 2
-            for x: Float in [-10, 10] { box(6, 37, 6, 0xB7C1BE, in: turret, at: SCNVector3(x, 19, 19)) }
-        } else {
-            box(37, 42, 22, 0x78888B, in: root, at: SCNVector3(0, 0, 14))
-            box(4, 4, 30, 0xB0C1C4, in: root, at: SCNVector3(0, 0, 34))
-            let dish = part(SCNCone(topRadius: 22, bottomRadius: 3, height: 10), cyan, in: turret, at: SCNVector3(0, 0, 49), metal: true)
-            dish.eulerAngles.x = 0.7
+        box(37, 42, 22, 0x78888B, in: root, at: SCNVector3(0, 0, 14))
+        box(4, 4, 30, 0xB0C1C4, in: root, at: SCNVector3(0, 0, 34))
+        let dish = part(SCNCone(topRadius: 22, bottomRadius: 3, height: 10), 0x758487, in: turret, at: SCNVector3(0, 0, 49), metal: true)
+        dish.eulerAngles.x = 0.7
+        part(SCNTorus(ringRadius: 21, pipeRadius: 0.7), 0xADB7AC, in: dish, at: SCNVector3(0, 5, 0), metal: true)
+        for index in 0..<8 {
+            let brace = part(SCNCylinder(radius: 0.5, height: 21), 0xADB7AC, in: dish, metal: true)
+            brace.position = SCNVector3(sin(Double(index) * .pi / 4) * 10, 5, cos(Double(index) * .pi / 4) * 10)
+            brace.eulerAngles = SCNVector3(.pi / 2, Double(index) * .pi / 4, 0)
+        }
+        for side: Float in [-1, 1] {
+            for row in 0..<6 {
+                box(6, 2, 2, 0x7A8685, in: root,
+                    at: SCNVector3(side * Float(r) * 0.66, Float(row) * Float(r) * 0.29 - Float(r) * 0.72, 8))
+            }
+            for y: Float in [-1, 1] {
+                let bolt = SCNCylinder(radius: 1.5, height: 1.5); bolt.radialSegmentCount = 6
+                part(bolt, 0xB4BBA6, in: root, at: SCNVector3(side * Float(r) * 0.45, y * Float(r) * 0.6, 6), metal: true).eulerAngles.x = .pi / 2
+            }
         }
         return root
     }
@@ -314,45 +519,47 @@ enum ModelArt {
                                          .laser: 0x72F5EB, .spread: 0xACFF7B, .lightning: 0xCF95FF, .escort: 0x82B8FF, .rescue: 0xFFE29A]
         let color = colors[kind] ?? cyan
         if kind == .crystal {
-            let crystal = SCNNode(); root.addChildNode(crystal)
-            for sign: Float in [-1, 1] {
-                let gem = SCNCone(topRadius: 0, bottomRadius: 9, height: 15); gem.radialSegmentCount = 5
-                let node = part(gem, color, in: crystal, at: SCNVector3(0, sign * 7.5, 3), metal: true)
-                if sign < 0 { node.eulerAngles.z = .pi }
+            let points = (0..<10).map { i -> (CGFloat, CGFloat) in
+                let angle = Double(i) * .pi / 5 + .pi / 2
+                let r = i.isMultiple(of: 2) ? 8.0 : 3.7
+                return (CGFloat(cos(angle) * r), CGFloat(sin(angle) * r))
             }
-            crystal.eulerAngles.x = 0.35
+            let star = hull(points, depth: 4, color: 0xFFCC58, in: root)
+            star.geometry?.firstMaterial = material(0xC99431)
+            let inset = hull(points.map { ($0.0 * 0.68, $0.1 * 0.68) }, depth: 1, color: 0xFFF1AD, in: root)
+            inset.position.z = 2.5
+            inset.geometry?.firstMaterial = material(0xF5D16A)
         } else if kind == .rescue {
-            box(26, 32, 5, 0x434D5C, in: root, at: SCNVector3(0, 0, -5))
-            part(SCNSphere(radius: 6), 0xFFE3BC, in: root, at: SCNVector3(0, 9, 7))
-            box(12, 15, 9, orange, in: root, at: SCNVector3(0, -3, 5))
-            for x: Float in [-8, 8] {
-                box(4, 16, 4, 0xE9C287, in: root, at: SCNVector3(x, 0, 4)).eulerAngles.z = x / 18
-                box(4, 10, 4, 0x364D63, in: root, at: SCNVector3(x / 2, -14, 3))
-            }
+            let pilot = SCNNode(geometry: referenceAirframe("pilot")); pilot.name = "authored-prop"
+            root.addChildNode(pilot)
         } else {
-            box(24, 24, 12, 0x354A60, in: root)
-            let symbol = SCNNode(); root.addChildNode(symbol); symbol.position.z = 8
+            let crate = SCNNode(geometry: referenceAirframe("supply")); crate.name = "authored-prop"
+            root.addChildNode(crate)
+            let symbol = SCNNode(); root.addChildNode(symbol); symbol.position.z = 5.5
+            symbol.scale = SCNVector3(0.48, 0.48, 0.48)
             switch kind {
             case .repair:
                 box(5, 17, 3, color, in: symbol, glow: true); box(17, 5, 3, color, in: symbol, glow: true)
             case .shield:
-                hull([(-8, 8), (8, 8), (7, -3), (0, -9), (-7, -3)], depth: 3, color: color, in: symbol)
+                hull([(-8, 8), (8, 8), (7, -3), (0, -9), (-7, -3)], depth: 3, color: color, in: symbol).geometry?.firstMaterial = material(color, glow: true)
             case .escort:
                 let mini = ship(); mini.scale = SCNVector3(0.28, 0.28, 0.28); symbol.addChildNode(mini)
             case .spread:
                 for angle in [-0.45, 0, 0.45] { box(3, 17, 3, color, in: symbol, glow: true).eulerAngles.z = Float(angle) }
             case .lightning, .power:
-                hull([(2, 10), (-7, -1), (-1, -1), (-3, -10), (7, 3), (1, 3)], depth: 3, color: color, in: symbol)
+                hull([(2, 10), (-7, -1), (-1, -1), (-3, -10), (7, 3), (1, 3)], depth: 3, color: color, in: symbol).geometry?.firstMaterial = material(color, glow: true)
             default:
                 for x: Float in [-5, 5] { box(3, 18, 3, color, in: symbol, at: SCNVector3(x, 0, 0), glow: true) }
             }
         }
-        let titles: [EntityKind: String] = [.crystal: "晶石", .repair: "维修", .shield: "护盾", .power: "过载", .laser: "激光", .spread: "散弹", .lightning: "雷电", .escort: "护航", .rescue: "SOS"]
-        let text = SCNText(string: titles[kind] ?? "", extrusionDepth: 0.3)
-        text.font = .systemFont(ofSize: 9, weight: .bold); text.flatness = 0.4
+        // Collection radius remains generous; the symbol carries identification at combat scale.
+        if kind != .crystal { root.scale = SCNVector3(0.78, 0.78, 0.78) }
+        if kind != .rescue { return root }
+        let text = SCNText(string: "SOS", extrusionDepth: 0.3)
+        text.font = .systemFont(ofSize: 7, weight: .bold); text.flatness = 0.4
         let label = part(text, color, in: root, glow: true)
         let bounds = label.boundingBox
-        label.position = SCNVector3(-(bounds.max.x + bounds.min.x) / 2, kind == .rescue ? 29 : -31, 12)
+        label.position = SCNVector3(-(bounds.max.x + bounds.min.x) / 2, 17, 12)
         return root
     }
 }
@@ -380,7 +587,7 @@ final class CombatRenderer {
 
     init(world: GameWorld, reducedEffects: Bool) {
         reduced = reducedEffects
-        environment = TerrainScene(world: world)
+        environment = TerrainScene(world: world, reducedEffects: reducedEffects)
         scene.rootNode.addChildNode(player)
         scene.rootNode.addChildNode(effects)
         let shell = SCNSphere(radius: 36); shell.segmentCount = 24
@@ -407,6 +614,7 @@ final class CombatRenderer {
         player.eulerAngles = SCNVector3(0.18 + (attitude.pitch - 0.18) * motionScale,
                                        attitude.roll * motionScale, -attitude.roll * 0.12 * motionScale)
         player.opacity = world.elapsed - world.lastPlayerHitAt < 1.25 && !reduced ? (sin(world.elapsed * 24) > 0 ? 1 : 0.45) : 1
+        animateShip(player, time: world.elapsed)
         shield.position = player.position
         shield.isHidden = !world.shield || world.crashTime != nil
         if let time = world.crashTime {
@@ -433,6 +641,7 @@ final class CombatRenderer {
             let p = world.escortPositions[index]
             node.position = SCNVector3(p.x, p.y, 65); node.eulerAngles = SCNVector3(0.18, attitude.roll * 0.75 * motionScale, -attitude.roll * 0.08 * motionScale)
             node.isHidden = world.crashTime != nil
+            animateShip(node, time: world.elapsed + Double(index))
         }
         let ids = Set(world.entities.map(\.id))
         for id in Array(entities.keys) where !ids.contains(id) { entities.removeValue(forKey: id)?.removeFromParentNode() }
@@ -446,11 +655,18 @@ final class CombatRenderer {
             let p = entity.position + entity.velocity * (world.crashTime ?? 0)
             node.position = SCNVector3(p.x, p.y, entity.kind == .obstacle ? -15 : 65)
             if entity.kind.isEnemy || entity.kind == .obstacle { node.opacity = world.elapsed - entity.lastHitAt < 0.12 ? 0.55 : 1 }
-            if entity.kind.isEnemy { node.eulerAngles = SCNVector3(-0.16, reduced ? 0 : sin(entity.age * 2) * 0.14, .pi) }
+            if entity.kind.isEnemy {
+                node.eulerAngles = SCNVector3(-0.16, reduced ? 0 : sin(entity.age * 2) * 0.14, .pi)
+                animateShip(node, time: entity.age)
+            }
             if entity.kind == .bolt || entity.kind == .hostile { node.eulerAngles.z = Float(atan2(entity.velocity.y, entity.velocity.x) - .pi / 2) }
             if entity.kind.isPickup {
                 node.position.z = Float(65 + (reduced ? 0 : sin(entity.age * 2) * 5))
                 node.eulerAngles = SCNVector3(0.22, reduced ? 0.2 : sin(entity.age * 1.4) * 0.5, world.mission.axis == .horizontal ? .pi / 2 : 0)
+                if entity.kind == .rescue {
+                    node.eulerAngles.x = 0; node.eulerAngles.y = 0
+                    node.position.z = -15
+                }
             }
             if let turret = node.childNode(withName: "turret", recursively: false) {
                 let aim = world.player - entity.position
@@ -464,11 +680,28 @@ final class CombatRenderer {
             let node: SCNNode
             if let old = lanes[lane.id] { node = old }
             else {
-                node = ModelArt.box(44, CGFloat(world.length), 1, 0xFF5247, in: scene.rootNode,
-                                    at: SCNVector3(lane.x, world.length / 2, 61), glow: true)
+                node = SCNNode(); scene.rootNode.addChildNode(node)
+                node.position = SCNVector3(lane.x, world.length / 2, 61)
+                let area = ModelArt.box(44, CGFloat(world.length), 1, 0xFF5247, in: node, glow: true)
+                area.opacity = 0.10
+                for x: Float in [-22, 22] { ModelArt.box(0.8, CGFloat(world.length), 1, 0xFF9D68, in: node, at: SCNVector3(x, 0, 1), glow: true) }
+                let core = ModelArt.box(16, CGFloat(world.length), 2, 0xFFF2D1, in: node, glow: true)
+                core.name = "lane-core"
                 lanes[lane.id] = node
             }
-            node.opacity = lane.active ? 0.7 : 0.14
+            node.opacity = lane.active ? 0.85 : 0.45
+            node.childNode(withName: "lane-core", recursively: false)?.isHidden = !lane.active
+        }
+    }
+
+    private func animateShip(_ node: SCNNode, time: Double) {
+        guard let body = node.childNode(withName: "airframe", recursively: false) else { return }
+        for child in body.childNodes {
+            if child.name == "engine" { child.scale.y = reduced ? 1 : Float(0.9 + sin(time * 27) * 0.14) }
+            if child.name == "reactor" {
+                let pulse = reduced ? Float(1) : Float(1 + sin(time * 3) * 0.12)
+                child.scale = SCNVector3(pulse, pulse, pulse)
+            }
         }
     }
 
@@ -483,6 +716,13 @@ final class CombatRenderer {
         }
         if entity.kind == .obstacle {
             let node = ModelArt.groundUnit(entity.obstacleSize)
+            if mission <= 2 {
+                let foundation = ModelArt.coastalIsland()
+                let size = Float(entity.radius / 60)
+                foundation.scale = SCNVector3(size, size, 0.4)
+                foundation.position.z = -16; foundation.castsShadow = false
+                node.addChildNode(foundation)
+            }
             let bar = ModelArt.box(CGFloat(entity.radius * 1.4), 2, 2, ModelArt.orange, in: node,
                                    at: SCNVector3(0, -entity.radius - 7, 30), glow: true)
             bar.name = "hp"
@@ -490,13 +730,28 @@ final class CombatRenderer {
         }
         if entity.kind == .bolt || entity.kind == .hostile {
             let node = SCNNode()
-            let color: UInt32 = entity.kind == .hostile ? 0xFF7954 : entity.projectileStyle == .spread ? 0xB2FF88 : entity.projectileStyle == .escort ? 0x8BAFFF : ModelArt.cyan
-            let geometry = SCNCapsule(capRadius: entity.kind == .hostile ? 3.8 : 1.8, height: entity.kind == .hostile ? 11 : 19)
+            let hostile = entity.kind == .hostile
+            let color: UInt32 = hostile ? 0xFF793C : entity.projectileStyle == .spread ? 0xB2FF88 : entity.projectileStyle == .escort ? 0x8BAFFF : 0xFFD786
+            let geometry = SCNCapsule(capRadius: hostile ? 2.7 : 1.1, height: hostile ? 7 : 11)
             geometry.radialSegmentCount = 6; geometry.capSegmentCount = 2
             ModelArt.part(geometry, color, in: node, glow: true)
+            let core = SCNCapsule(capRadius: hostile ? 1.1 : 0.5, height: hostile ? 4 : 9)
+            core.radialSegmentCount = 6; core.capSegmentCount = 2
+            ModelArt.part(core, 0xFFF8DE, in: node, at: SCNVector3(0, 0.5, 3.5), glow: true)
+            let trail = ModelArt.part(SCNCone(topRadius: hostile ? 1.8 : 1.0, bottomRadius: 0, height: hostile ? 14 : 20), color,
+                                     in: node, at: SCNVector3(0, hostile ? -8 : -12, 0), glow: true)
+            trail.opacity = 0.22
+            node.castsShadow = false
             return node
         }
-        return ModelArt.pickup(entity.kind)
+        let pickup = ModelArt.pickup(entity.kind)
+        if entity.kind == .rescue && mission <= 2 {
+            let shore = ModelArt.coastalIsland()
+            shore.scale = SCNVector3(0.38, 0.38, 0.4)
+            shore.position.z = -16; shore.castsShadow = false
+            pickup.addChildNode(shore)
+        }
+        return pickup
     }
 
     func show(_ effect: BattleEffect, world: GameWorld) {
@@ -504,14 +759,40 @@ final class CombatRenderer {
         switch effect {
         case let .explosion(p, boss): burst(location(p), radius: boss ? 65 : 23)
         case let .rubble(p, r): burst(SCNVector3(p.x, p.y, -5), radius: r)
-        case let .pickup(p, _):
+        case let .pickup(p, kind):
             let flash = ModelArt.part(SCNSphere(radius: 5), ModelArt.cyan, in: effects, at: location(p), glow: true)
             expire(flash, duration: 0.22, movement: SCNVector3(0, 0, 16), scale: 0.1)
+            if effects.childNodes.count < (reduced ? 60 : 180) {
+                let feedbackName = kind == .crystal ? "loot-feedback" : "supply-feedback"
+                effects.childNode(withName: feedbackName, recursively: false)?.removeFromParentNode()
+                let captions: [EntityKind: String] = [.crystal: "+15", .rescue: "救援成功 +40", .repair: "装甲修复",
+                    .shield: "护盾就绪", .power: "过载 8s", .laser: "激光 12s", .spread: "散弹 12s", .lightning: "雷电 12s", .escort: "护航补给"]
+                let text = SCNText(string: captions[kind] ?? "补给回收", extrusionDepth: 0.1)
+                text.font = .systemFont(ofSize: kind == .crystal ? 11 : 14, weight: .heavy)
+                text.flatness = 0.5
+                let label = ModelArt.part(text, kind == .crystal || kind == .rescue ? 0xFFE29A : ModelArt.cyan, in: effects, at: location(p), glow: true)
+                label.name = feedbackName
+                let bounds = label.boundingBox
+                label.pivot = SCNMatrix4MakeTranslation((bounds.min.x + bounds.max.x) / 2, bounds.min.y, 0)
+                label.position.z = 100
+                if world.mission.axis == .horizontal {
+                    label.eulerAngles.z = .pi / 2
+                    label.position.x -= kind == .crystal ? 22 : 44
+                } else { label.position.y += kind == .crystal ? 22 : 44 }
+                expire(label, duration: kind == .crystal ? 0.6 : 1.1,
+                       movement: world.mission.axis == .vertical ? SCNVector3(0, 28, 0) : SCNVector3(-28, 0, 0))
+            }
         case let .impact(p): burst(location(p), radius: 5)
         case .damage: burst(location(world.player), radius: 12)
         case .emp: ring(location(world.player), radius: 500, color: ModelArt.cyan)
         case let .beam(a, b): trail([a, b], lightning: false)
         case let .lightningArc(points): trail(points, lightning: true)
+        case .shot, .spreadShot:
+            guard effects.childNodes.count < (reduced ? 60 : 180) else { return }
+            let flash = ModelArt.part(SCNSphere(radius: 2.6), 0xFFF0CB, in: effects,
+                                     at: SCNVector3(world.player.x, world.player.y + 25, 66), glow: true)
+            flash.scale = SCNVector3(0.7, 2, 0.5)
+            expire(flash, duration: 0.06)
         case .crash:
             lastSmoke = 0
             player.enumerateChildNodes { node, _ in if node.name == "engine" { node.isHidden = true } }
@@ -541,13 +822,37 @@ final class CombatRenderer {
     private func burst(_ point: SCNVector3, radius: Double) {
         // Bounded low-poly debris avoids sprite particles and keeps fill cost predictable.
         guard effects.childNodes.count < (reduced ? 60 : 180) else { return }
-        ring(point, radius: radius * 1.4, color: ModelArt.orange)
+        if radius >= 40 { ring(point, radius: radius * 1.4, color: ModelArt.orange) }
+        let core = SCNSphere(radius: max(2, radius * 0.34)); core.segmentCount = 10
+        let flash = ModelArt.part(core, 0xFFF4D6, in: effects, at: point, glow: true)
+        expire(flash, duration: reduced ? 0.12 : 0.18, scale: 0.1)
+        if radius >= 20 {
+            for i in 0..<(reduced ? 1 : 3) {
+                let cloud = SCNSphere(radius: radius * (0.17 + Double(i) * 0.04)); cloud.segmentCount = 10
+                let smoke = ModelArt.part(cloud, i == 0 ? 0x252D33 : 0x55564F, in: effects,
+                                         at: SCNVector3(point.x + Float(i * 5), point.y - Float(i * 6), point.z - 8))
+                smoke.opacity = 0.38
+                expire(smoke, duration: 0.8 + Double(i) * 0.16, movement: SCNVector3(8 + i * 4, -18 - i * 3, i * 4), scale: 2.6)
+                if !reduced {
+                    let flame = ModelArt.part(SCNSphere(radius: radius * 0.24), i == 1 ? 0xFFCB66 : 0xF58635,
+                                              in: effects, at: SCNVector3(point.x + Float(i * 6 - 6), point.y, point.z + 2), glow: true)
+                    expire(flame, duration: 0.22 + Double(i) * 0.07, movement: SCNVector3(i * 9 - 9, 9, 0), scale: 0.2)
+                }
+            }
+        }
         for i in 0..<(reduced ? 4 : 9) {
             let angle = Double(i) * 2.399
-            let sphere = SCNSphere(radius: max(1, radius * 0.16)); sphere.segmentCount = 6
-            let node = ModelArt.part(sphere, i.isMultiple(of: 3) ? 0xFFE7B3 : ModelArt.orange, in: effects, at: point, glow: true)
+            let fragment = SCNBox(width: max(1, radius * 0.09), height: max(2, radius * 0.18), length: 1.5, chamferRadius: 0)
+            let node = ModelArt.part(fragment, i.isMultiple(of: 3) ? 0xFFE7B3 : 0x706456, in: effects, at: point, glow: i.isMultiple(of: 3), metal: true)
+            node.eulerAngles = SCNVector3(angle, angle * 2, angle)
             expire(node, duration: 0.3 + Double(i % 3) * 0.12,
                    movement: SCNVector3(cos(angle) * radius, sin(angle) * radius, Double(i) * 3), scale: 0.15)
+            if !reduced && radius >= 20 {
+                let spark = ModelArt.box(1, CGFloat(radius * 0.35), 1, 0xFFD29B, in: effects, at: point, glow: true)
+                spark.eulerAngles.z = Float(angle - .pi / 2)
+                expire(spark, duration: 0.22 + Double(i % 3) * 0.07,
+                       movement: SCNVector3(cos(angle) * radius * 1.9, sin(angle) * radius * 1.9, 4), scale: 0.1)
+            }
         }
     }
 
@@ -562,7 +867,7 @@ final class CombatRenderer {
     }
 
     private func trail(_ points: [Vector], lightning: Bool) {
-        guard points.count >= 2 else { return }
+        guard points.count >= 2, effects.childNodes.count < (reduced ? 60 : 180) else { return }
         let root = SCNNode(); effects.addChildNode(root)
         for (a, b) in zip(points, points.dropFirst()) {
             var knots = [a]
@@ -578,6 +883,9 @@ final class CombatRenderer {
                 let node = ModelArt.part(cylinder, lightning ? 0xD3A7FF : ModelArt.cyan, in: root,
                                          at: SCNVector3((start.x + end.x) / 2, (start.y + end.y) / 2, 65), glow: true)
                 node.eulerAngles.z = Float(atan2(d.y, d.x) - .pi / 2)
+                let core = SCNCylinder(radius: lightning ? 0.6 : 0.9, height: d.length)
+                core.radialSegmentCount = 5
+                ModelArt.part(core, 0xF6FAFF, in: node, at: SCNVector3(0, 0, 2.6), glow: true)
             }
         }
         expire(root, duration: lightning ? 0.22 : 0.13)
@@ -587,7 +895,14 @@ final class CombatRenderer {
     var bankAngle: Double { Double(player.eulerAngles.y) }
 
     private func validateModels() {
-        var models = [ModelArt.ship(), ModelArt.ship(.scout), ModelArt.ship(.armored)]
+        for seed in 0..<7 {
+            let rock = ModelArt.rock(seed: seed, tint: 0xA7AC8A)
+            assert(rock.boundingBox.max.z - rock.boundingBox.min.z > 60)
+            assert(rock.geometry?.sources(for: .texcoord).count == 1)
+            assert(rock.geometry?.sources(for: .normal).count == 1)
+            assert(rock.geometry?.firstMaterial?.diffuse.contents is UIImage)
+        }
+        var models = [ModelArt.ship(), ModelArt.ship(.scout), ModelArt.ship(.armored), ModelArt.ship(.interceptor)]
         models += (1...5).map { ModelArt.ship(.boss, mission: $0) }
         models += ObstacleSize.allCases.map { ModelArt.groundUnit($0) }
         let pickups = [EntityKind.crystal, .repair, .shield, .power, .laser, .spread, .lightning, .escort, .rescue].map { ModelArt.pickup($0) }
@@ -602,11 +917,12 @@ final class CombatRenderer {
                 if let geometry = child.geometry {
                     assert(!(geometry is SCNPlane), "World art cannot be a billboard")
                     assert(!geometry.materials.isEmpty)
-                    if geometry.materials.contains(where: { $0.diffuse.contents is UIImage }) {
-                        assert(child.name == "airframe")
+                    if child.name == "airframe" || child.name == "authored-prop" {
                         assert(geometry.sources(for: .texcoord).count == 1)
                         assert(geometry.elements.count == 3, "Textured hull has top, side walls and underside")
-                        assert(geometry.boundingBox.max.z - geometry.boundingBox.min.z > 8)
+                        assert(geometry.boundingBox.max.z - geometry.boundingBox.min.z > 3)
+                    } else if geometry.materials.contains(where: { $0.diffuse.contents is UIImage }) {
+                        assert(geometry.materials.allSatisfy { $0.name == "original-armor" }, "Only authored armor textures belong on model parts")
                     }
                 }
             }
@@ -623,12 +939,13 @@ final class TerrainScene {
     private var tiles: [SCNNode] = []
     private var walls: [SCNNode] = []
     private var structures: [SCNNode] = []
+    private var mist: [SCNNode] = []
     private let horizontal: Bool
     private let biome: Biome
     private var lastWallUpdate = -Double.infinity
     private var tileLength = 1200.0
 
-    init(world: GameWorld) {
+    init(world: GameWorld, reducedEffects: Bool = false) {
         horizontal = world.mission.axis == .horizontal
         biome = world.mission.biome
         camera.camera = SCNCamera()
@@ -636,8 +953,11 @@ final class TerrainScene {
         camera.camera?.orthographicScale = 390
         camera.camera?.zFar = 4000
         camera.camera?.wantsHDR = true
-        camera.camera?.bloomIntensity = 0.25
+        // Keep dark biomes dark; eye adaptation otherwise washes out terrain and clips aircraft paint.
+        camera.camera?.wantsExposureAdaptation = false
+        camera.camera?.bloomIntensity = 0.18
         camera.camera?.bloomThreshold = 1.2
+        camera.camera?.exposureOffset = -0.25
         scene.background.contents = UIColor(hex: 0x04101E)
         camera.position = SCNVector3(world.width / 2, world.length / 2, 1100)
         camera.look(at: SCNVector3(world.width / 2, world.length / 2, 0))
@@ -647,10 +967,10 @@ final class TerrainScene {
         sun.light = SCNLight()
         sun.light?.type = .directional
         sun.light?.color = UIColor(hex: biome == .glacier ? 0xB8E4FF : 0xFFE2B6)
-        sun.light?.intensity = 950
+        sun.light?.intensity = 650
         sun.light?.castsShadow = true
         sun.light?.shadowColor = UIColor(hex: 0x07131F, alpha: 0.65)
-        sun.light?.shadowMapSize = CGSize(width: 1024, height: 1024)
+        sun.light?.shadowMapSize = CGSize(width: reducedEffects ? 1024 : 2048, height: reducedEffects ? 1024 : 2048)
         sun.light?.orthographicScale = 1000
         sun.light?.shadowRadius = 3
         sun.position = SCNVector3(-350, 650, 900)
@@ -658,14 +978,50 @@ final class TerrainScene {
         scene.rootNode.addChildNode(sun)
         let fill = SCNNode()
         fill.light = SCNLight(); fill.light?.type = .ambient
-        fill.light?.color = UIColor(hex: 0xD3E0EB); fill.light?.intensity = 300
+        fill.light?.color = UIColor(hex: 0xD3E0EB); fill.light?.intensity = 260
         scene.rootNode.addChildNode(fill)
-        let colors: [Biome: UInt32] = [.ocean: 0x124E63, .harbor: 0x102B40, .desert: 0x9B6241, .glacier: 0x28566B, .orbit: 0x080F20]
+        let colors: [Biome: UInt32] = [.ocean: 0x18384A, .harbor: 0x102534, .desert: 0xAA8060, .glacier: 0x44718D, .orbit: 0x080F20]
         surface.diffuse.contents = UIColor(hex: colors[biome]!)
         surface.lightingModel = biome == .orbit ? .constant : .physicallyBased
         surface.metalness.contents = biome == .ocean || biome == .harbor ? 0.65 : 0.15
         surface.roughness.contents = biome == .ocean || biome == .harbor ? 0.25 : 0.75
         surface.isDoubleSided = true
+        if biome != .orbit {
+            // World-space UVs keep detail on the scrolling surface; only water moves independently.
+            let water = biome == .ocean || biome == .harbor
+            surface.shaderModifiers = [.surface: water ? """
+                #pragma arguments
+                float terrainPhase;
+                #pragma body
+                float shimmer = sin(_surface.diffuseTexcoord.x * 83.0 + terrainPhase)
+                    * sin(_surface.diffuseTexcoord.y * 57.0 - terrainPhase * 0.7);
+                // Keep foam below projectile brightness while preserving the deep-water color.
+                _surface.diffuse.rgb = mix(float3(0.015, 0.045, 0.075), _surface.diffuse.rgb, 0.40 + shimmer * 0.02);
+                """ : """
+                #pragma body
+                float2 p = _surface.diffuseTexcoord * float2(1220.0, 1200.0);
+                float strata = sin(p.y * 0.018 + sin(p.x * 0.027) * 4.0);
+                float grain = dot(_surface.diffuse.rgb, float3(0.33));
+                _surface.diffuse.rgb = float3(0.28 + grain * 0.27 + strata * 0.025);
+                """]
+            if water {
+                let artwork = UIImage(named: "Surface-ocean-v16"); assert(artwork != nil)
+                surface.diffuse.contents = artwork
+                surface.diffuse.wrapS = .repeat; surface.diffuse.wrapT = .repeat
+                surface.diffuse.mipFilter = .linear
+                surface.diffuse.contentsTransform = SCNMatrix4MakeScale(2.0333, 2, 1)
+                surface.roughness.contents = 0.85; surface.metalness.contents = 0
+                surface.lightingModel = .constant
+                surface.setValue(Float(0), forKey: "terrainPhase")
+            }
+            else {
+                surface.diffuse.contents = UIImage(named: "Surface-rock")
+                surface.diffuse.wrapS = .repeat; surface.diffuse.wrapT = .repeat
+                surface.diffuse.contentsTransform = SCNMatrix4MakeScale(3, 3, 1)
+                surface.multiply.contents = UIColor(hex: biome == .glacier ? 0x426D83 : 0xC8A57C)
+                surface.roughness.contents = biome == .glacier ? 0.38 : 0.95
+            }
+        }
         let geometry = groundMesh()
         for _ in 0..<3 {
             let tile = SCNNode(geometry: geometry)
@@ -680,6 +1036,24 @@ final class TerrainScene {
             let structure = makeStructure(index)
             scene.rootNode.addChildNode(structure); structures.append(structure)
         }
+        if biome != .orbit && !reducedEffects {
+            let haze = SCNMaterial()
+            haze.diffuse.contents = UIColor(hex: biome == .desert ? 0xD7B99A : 0xC3DCE3, alpha: 0.045)
+            haze.lightingModel = .constant; haze.writesToDepthBuffer = false
+            for index in 0..<4 {
+                let cloud = SCNNode()
+                for puff in 0..<3 {
+                    let shape = SCNSphere(radius: 55); shape.segmentCount = 12; shape.materials = [haze]
+                    let node = SCNNode(geometry: shape); node.castsShadow = false
+                    node.scale = SCNVector3(1.2, 2.1, 0.18)
+                    node.position = SCNVector3(Float(puff * 15), Float(puff * 58), 0)
+                    cloud.addChildNode(node)
+                }
+                cloud.position.x = index.isMultiple(of: 2) ? -42 : Float(world.width + 12)
+                cloud.position.z = 145
+                scene.rootNode.addChildNode(cloud); mist.append(cloud)
+            }
+        }
         if biome == .orbit {
             for index in 0..<110 {
                 let star = SCNSphere(radius: index.isMultiple(of: 11) ? 1.7 : 0.7); star.segmentCount = 4
@@ -687,12 +1061,46 @@ final class TerrainScene {
                               at: SCNVector3(Double(index * 173 % 650) - 130, Double(index * 293 % 1000) - 110, -60), glow: true)
             }
             let planet = ModelArt.part(SCNSphere(radius: 165), 0x184F76, in: scene.rootNode, at: SCNVector3(400, 570, -360))
-            planet.geometry?.firstMaterial = ModelArt.material(0x184F76)
+            let ocean = ModelArt.material(0x184F76).copy() as! SCNMaterial
+            ocean.shaderModifiers = [.surface: """
+                #pragma body
+                float2 p = _surface.diffuseTexcoord * float2(8.0, 4.0);
+                float land = 0.0, weight = 0.5, period = 8.0;
+                for (int octave = 0; octave < 6; octave++) {
+                    float2 cell = floor(p), f = fract(p);
+                    cell.x = fmod(cell.x, period);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float4 n = float4(dot(cell, float2(127.1, 311.7)),
+                        dot(float2(fmod(cell.x + 1.0, period), cell.y), float2(127.1, 311.7)),
+                        dot(cell + float2(0.0, 1.0), float2(127.1, 311.7)),
+                        dot(float2(fmod(cell.x + 1.0, period), cell.y + 1.0), float2(127.1, 311.7)));
+                    float4 h = fract(sin(n) * 43758.5453);
+                    land += mix(mix(h.x, h.y, f.x), mix(h.z, h.w, f.x), f.y) * weight;
+                    p *= 2.0; period *= 2.0; weight *= 0.5;
+                }
+                float coast = smoothstep(0.48, 0.56, land);
+                float cloud = smoothstep(0.64, 0.78, land);
+                _surface.diffuse.rgb = mix(float3(0.002, 0.012, 0.025), float3(0.012, 0.026, 0.018), coast);
+                _surface.diffuse.rgb = mix(_surface.diffuse.rgb, float3(0.10, 0.13, 0.15), cloud);
+                """]
+            planet.geometry?.firstMaterial = ocean
+            let air = SCNMaterial(); air.lightingModel = .constant
+            air.diffuse.contents = UIColor(hex: 0x56B9ED, alpha: 0.08)
+            air.writesToDepthBuffer = false; air.cullMode = .front
+            let shell = SCNSphere(radius: 170); shell.segmentCount = 48; shell.materials = [air]
+            planet.addChildNode(SCNNode(geometry: shell))
         }
         update(world)
     }
 
     func update(_ world: GameWorld) {
+        if biome == .ocean || biome == .harbor {
+            surface.setValue(Float(world.elapsed * 0.35), forKey: "terrainPhase")
+        }
+        for (index, cloud) in mist.enumerated() {
+            let span = world.length + 500
+            cloud.position.y = Float((Double(index) * span / 4 + span - (world.elapsed * 19).truncatingRemainder(dividingBy: span)).truncatingRemainder(dividingBy: span) - 250)
+        }
         let scroll = world.elapsed * GameWorld.groundSpeed
         let offset = scroll.truncatingRemainder(dividingBy: tileLength)
         for (index, tile) in tiles.enumerated() { tile.position.y = Float(Double(index - 1) * tileLength - offset) }
@@ -709,10 +1117,11 @@ final class TerrainScene {
             let left = index.isMultiple(of: 2)
             if horizontal {
                 let bounds = world.corridor(at: y)
-                structure.position = SCNVector3(left ? bounds.lowerBound - 46 : bounds.upperBound + 46, y, -25)
+                structure.position = SCNVector3(left ? bounds.lowerBound - 46 : bounds.upperBound + 46, y, biome == .harbor ? 30 : -25)
             } else {
-                let x = left ? -5.0 + Double(index % 3) * 17 : 380.0 - Double(index % 3) * 17
-                structure.position = SCNVector3(x, y, biome == .ocean ? -55 : height(x, y + scroll))
+                let inset = biome == .ocean ? Double(index % 4) * 25 : Double(index % 3) * 17
+                let x = left ? -5.0 + inset : 395.0 - inset
+                structure.position = SCNVector3(x, y, biome == .ocean ? -60 : height(x, y + scroll))
             }
         }
     }
@@ -768,29 +1177,15 @@ final class TerrainScene {
             indices += upper ? [a, b, a + 1, a + 1, b, b + 1] : [a, a + 1, b, a + 1, b + 1, b]
         } }
         let geometry = mesh(vertices, uv: uv, indices: indices)
-        geometry.materials = [ModelArt.material(biome == .glacier ? 0x9BCBD6 : 0x344557)]
+        let bank = (biome == .glacier ? ModelArt.rockMaterial(0x95CBEC) : ModelArt.material(0x82949B, metal: true)).copy() as! SCNMaterial
+        bank.diffuse.wrapS = .repeat; bank.diffuse.wrapT = .repeat
+        bank.diffuse.contentsTransform = SCNMatrix4MakeScale(4, 4, 1)
+        geometry.materials = [bank]
         return geometry
     }
 
     private func mesh(_ vertices: [SCNVector3], uv: [CGPoint], indices: [Int32]) -> SCNGeometry {
-        assert(vertices.count == uv.count && indices.count.isMultiple(of: 3))
-        assert(vertices.allSatisfy { $0.x.isFinite && $0.y.isFinite && $0.z.isFinite })
-        assert(indices.allSatisfy { $0 >= 0 && Int($0) < vertices.count })
-        var normals = Array(repeating: SIMD3<Float>.zero, count: vertices.count)
-        for face in stride(from: 0, to: indices.count, by: 3) {
-            let a = Int(indices[face]), b = Int(indices[face + 1]), c = Int(indices[face + 2])
-            let p = SIMD3<Float>(vertices[a].x, vertices[a].y, vertices[a].z)
-            let q = SIMD3<Float>(vertices[b].x, vertices[b].y, vertices[b].z)
-            let r = SIMD3<Float>(vertices[c].x, vertices[c].y, vertices[c].z)
-            let normal = simd_cross(q - p, r - p)
-            normals[a] += normal; normals[b] += normal; normals[c] += normal
-        }
-        let normalized = normals.map { normal -> SCNVector3 in
-            assert(simd_length_squared(normal) > 0)
-            return SCNVector3(simd_normalize(normal))
-        }
-        let geometry = SCNGeometry(sources: [.init(vertices: vertices), .init(normals: normalized), .init(textureCoordinates: uv)],
-                                   elements: [SCNGeometryElement(indices: indices, primitiveType: .triangles)])
+        let geometry = ModelArt.mesh(vertices, uv: uv, indices: indices)
         geometry.materials = [surface]
         return geometry
     }
@@ -799,18 +1194,11 @@ final class TerrainScene {
         let root = SCNNode()
         switch biome {
         case .ocean:
-            let island = ModelArt.island(seed: index, color: index.isMultiple(of: 2) ? 0x456B5E : 0x58745D)
-            island.scale = SCNVector3(0.85 + Float(index % 3) * 0.12, 0.8 + Float(index % 4) * 0.1, 1)
+            let island = ModelArt.coastalIsland()
+            island.scale = SCNVector3(0.65 + Float(index % 3) * 0.14, 0.60 + Float(index % 4) * 0.12, 1)
+            island.eulerAngles.z = Float(index) * 2.4
+            island.castsShadow = false
             root.addChildNode(island)
-            for i in 0..<5 {
-                let tree = ModelArt.part(SCNCone(topRadius: 0, bottomRadius: 10, height: 26), 0x234C41, in: root,
-                                         at: SCNVector3(i * 13 - 26, i * 22 - 44, 30))
-                tree.eulerAngles.x = .pi / 2
-            }
-            if index.isMultiple(of: 3) {
-                ModelArt.box(27, 42, 18, 0xB8C0BA, in: root, at: SCNVector3(0, 5, 27))
-                ModelArt.box(20, 4, 2, ModelArt.cyan, in: root, at: SCNVector3(0, 5, 37), glow: true)
-            }
         case .harbor:
             ModelArt.box(74, 100, 13, 0x455263, in: root)
             for i in 0..<3 {
@@ -823,14 +1211,22 @@ final class TerrainScene {
                 }
             }
             ModelArt.box(3, 85, 3, 0xE4A254, in: root, at: SCNVector3(-31, 0, 12), glow: true)
+            if index.isMultiple(of: 3) {
+                for y: Float in [-28, 28] {
+                    ModelArt.box(5, 5, 62, 0x9E875B, in: root, at: SCNVector3(-25, y, 35))
+                }
+                ModelArt.box(6, 67, 6, 0xB09D72, in: root, at: SCNVector3(-25, 0, 68))
+                ModelArt.box(54, 4, 4, 0xB09D72, in: root, at: SCNVector3(-4, 0, 70))
+                ModelArt.box(1, 1, 24, 0x8C9699, in: root, at: SCNVector3(20, 0, 56))
+            }
         case .desert, .glacier:
             let ice = biome == .glacier
-            for i in 0..<5 {
-                let cone = SCNCone(topRadius: ice ? 0 : 13, bottomRadius: CGFloat(20 + i * 4), height: CGFloat(35 + i * 10))
-                cone.radialSegmentCount = ice ? 5 : 6
-                let rock = ModelArt.part(cone, ice ? (i.isMultiple(of: 2) ? 0xACD9E3 : 0x629BAF) : (i.isMultiple(of: 2) ? 0xAF7954 : 0x704737),
-                                         in: root, at: SCNVector3(i * 13 - 26, i * 26 - 52, 16))
-                rock.eulerAngles = SCNVector3(.pi / 2, Float(i) * 0.25, Float(i) * 0.4)
+            for i in 0..<6 {
+                let rock = ModelArt.rock(seed: index + i, tint: ice ? 0xA1D8F0 : (i.isMultiple(of: 2) ? 0xDBAC7F : 0xA77958))
+                rock.position = SCNVector3(i * 13 - 26, i * 26 - 65, 12 + i % 3 * 6)
+                rock.scale = SCNVector3(ice ? 0.7 : 0.85, 0.8 + Float(i % 3) * 0.2, ice ? 1.7 : 1.1)
+                rock.eulerAngles.z = Float(i) * 0.7
+                root.addChildNode(rock)
             }
         case .orbit:
             ModelArt.box(45, 75, 15, 0x66798F, in: root, at: SCNVector3(0, 0, 775))
@@ -839,6 +1235,11 @@ final class TerrainScene {
                 for row in 0..<8 { ModelArt.box(44, 1, 1, 0x6F9CBD, in: root, at: SCNVector3(side * 46, Float(row * 11 - 39), 781)) }
             }
             ModelArt.box(4, 48, 2, ModelArt.cyan, in: root, at: SCNVector3(0, 0, 786), glow: true)
+            for x: Float in [-66, -26, 26, 66] {
+                ModelArt.box(1.2, 88, 2, 0x8D9CA6, in: root, at: SCNVector3(x, 0, 782))
+            }
+            ModelArt.box(2, 36, 3, 0x8D9CA6, in: root, at: SCNVector3(0, 50, 789))
+            ModelArt.part(SCNSphere(radius: 2), 0xFFB761, in: root, at: SCNVector3(0, 68, 789), glow: true)
         }
         return root
     }
@@ -870,7 +1271,7 @@ struct ModelPreview: UIViewRepresentable {
         camera.camera?.usesOrthographicProjection = true
         camera.camera?.zFar = 2500
         let sun = SCNNode(); sun.light = SCNLight(); sun.light?.type = .directional
-        sun.light?.intensity = 1100; sun.light?.castsShadow = true
+        sun.light?.intensity = 950; sun.light?.castsShadow = true
         sun.eulerAngles = SCNVector3(-0.45, -0.6, 0)
         scene.rootNode.addChildNode(sun)
         let ambient = SCNNode(); ambient.light = SCNLight(); ambient.light?.type = .ambient

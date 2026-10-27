@@ -17,15 +17,16 @@ struct Vector: Equatable, Sendable {
 }
 
 enum EntityKind: String, Sendable {
-    case scout, armored, boss, bolt, hostile, crystal, rescue, repair, shield, power, obstacle
+    case scout, armored, interceptor, boss, bolt, hostile, crystal, rescue, repair, shield, power, obstacle
     case laser, spread, lightning, escort
-    var isEnemy: Bool { self == .scout || self == .armored || self == .boss }
+    var isEnemy: Bool { self == .scout || self == .armored || self == .interceptor || self == .boss }
     var isPickup: Bool { [.crystal, .rescue, .repair, .shield, .power, .laser, .spread, .lightning, .escort].contains(self) }
+    var isSupply: Bool { isPickup && self != .crystal && self != .rescue }
     var radius: Double { switch self {
     case .obstacle: 32
     case .boss: 57
     case .armored: 23
-    case .scout: 18
+    case .scout, .interceptor: 18
     case .hostile: 5
     case .bolt: 4
     default: 15
@@ -127,10 +128,11 @@ struct GameWorld {
     private var nextID = 0
     private var nextShot = 0.0
     private var nextEscortShot = 0.0
-    private var escortSupplyIndex = 0
+    private var supplyDropIndex = 0
+    private var lastSupplyAt = -Double.infinity
+    private var lastSupplyKills = 0
     private var nextWave = 0
     private var lastWaveAt = -Double.infinity
-    private var reinforcements = 0
     private var rescueIndex = 0
     private var obstacleIndex = 0
     static let groundSpeed = 25.0
@@ -297,36 +299,32 @@ struct GameWorld {
     }
 
     private mutating func spawnTimeline() {
-        let boosted = elapsed < overdriveUntil
         let aircraft = entities.filter { $0.kind.isEnemy && $0.hp > 0 }
-        let ahead = aircraft.filter { $0.position.y > player.y + 40 }.count
         let due = nextWave < mission.waves.count && elapsed >= mission.waves[nextWave].time
-        let thin = ahead < (boosted ? 3 : 2)
-        // Count incoming aircraft too, so an offscreen formation cannot trigger a spawn storm.
-        if !bossSpawned, boss == nil, elapsed >= (boosted ? 1 : 4), elapsed < mission.bossTime - 4,
-           elapsed - lastWaveAt >= (boosted ? 2 : 4), aircraft.count <= 4, due || thin {
-            let authored = nextWave < mission.waves.count
-            let wave = mission.waves[authored ? nextWave : reinforcements % mission.waves.count]
+        // Fast clears leave breathing room instead of consuming the next encounter early.
+        if !bossSpawned, boss == nil, due, elapsed < mission.bossTime - 4,
+           elapsed - lastWaveAt >= 8, aircraft.count <= 3 {
+            let wave = mission.waves[nextWave]
             for index in 0..<wave.count {
-                let fraction = Double(index + 1) / Double(wave.count + 1)
+                let fraction = Double(index) / Double(max(1, wave.count - 1))
                 let x: Double
                 let offset: Double
                 switch wave.formation {
-                case .arrow: x = 65 + 260 * fraction; offset = abs(fraction - 0.5) * 150
-                case .sweep: x = 80 + Double(index) * 55; offset = Double(index) * 48
-                case .weave: x = 105 + Double(index) * 55; offset = Double(index) * 42
-                case .wall: x = 65 + 260 * fraction; offset = 0
-                case .pincer: x = index.isMultiple(of: 2) ? 60 : 330; offset = Double(index / 2) * 75
+                case .arrow: x = 60 + 270 * fraction; offset = abs(fraction - 0.5) * 170
+                case .sweep, .weave: x = 60 + 270 * fraction; offset = Double(index) * 55
+                case .wall: x = 55 + 280 * fraction; offset = 0
+                case .pincer: x = index.isMultiple(of: 2) ? 60 : 330; offset = Double(index / 2) * 100
                 }
                 let cross = mission.axis == .vertical ? x : width / 2 + (x - 195) * 1.25
                 let armored = wave.armored && index.isMultiple(of: 2)
+                let interceptor = !armored && mission.id >= 2 && nextWave >= 3 && index == wave.count - 1
                 let hits = min(3, (mission.id + 1 + (armored ? 1 : 0)) / 2)
-                add(armored ? .armored : .scout, at: Vector(x: cross, y: length + 12 + min(offset, boosted ? 28 : 90) * flightScale),
-                    velocity: Vector(x: 0, y: (-(armored ? 55 : 70) - Double(mission.id) * 4) * flightScale),
+                add(armored ? .armored : interceptor ? .interceptor : .scout, at: Vector(x: cross, y: length + 12 + offset * flightScale),
+                    velocity: Vector(x: 0, y: (-(armored ? 55 : interceptor ? 110 : 70) - Double(mission.id) * 4) * flightScale),
                     hp: Double(hits) * 11,
-                    formation: wave.formation, motionPhase: Double(index) * 0.8)
+                    formation: wave.formation, motionPhase: 0)
             }
-            if authored { nextWave += 1 } else { reinforcements += 1 }
+            nextWave += 1
             lastWaveAt = elapsed
         }
         let obstacleTimes = [6.0, 37.0, 71.0, 106.0]
@@ -336,11 +334,6 @@ struct GameWorld {
             let size = ObstacleSize.allCases[(obstacleIndex + mission.id - 1) % 3]
             add(.obstacle, at: Vector(x: x, y: length + 52), velocity: Vector(x: 0, y: -Self.groundSpeed), hp: size.durability, obstacleSize: size)
             obstacleIndex += 1
-        }
-        let escortTimes = [12.0, 36.0, 60.0, 84.0]
-        if escortSupplyIndex < escortTimes.count, elapsed >= escortTimes[escortSupplyIndex], !bossSpawned {
-            add(.escort, at: Vector(x: width / 2, y: length - 50), velocity: Vector(x: 0, y: -90 * flightScale))
-            escortSupplyIndex += 1
         }
         let rescueTimes = [18.0, 43.0, 70.0]
         if rescueIndex < 3 && elapsed >= rescueTimes[rescueIndex] {
@@ -432,7 +425,13 @@ struct GameWorld {
     private mutating func fire(_ enemy: Entity) {
         let aim = (player - enemy.position).unit
         if enemy.kind != .boss {
-            add(.hostile, at: enemy.position + Vector(x: 0, y: -22), velocity: aim * (90 + Double(mission.id) * 7) * flightScale * 1.5, damage: 18)
+            let count = enemy.kind == .armored ? 3 : enemy.kind == .interceptor ? 2
+                : enemy.kind == .obstacle ? enemy.obstacleSize.rawValue + 1 : 1
+            for index in 0..<count {
+                let angle = atan2(aim.y, aim.x) + (Double(index) - Double(count - 1) / 2) * 0.18
+                add(.hostile, at: enemy.position + Vector(x: 0, y: -22),
+                    velocity: Vector(x: cos(angle), y: sin(angle)) * (90 + Double(mission.id) * 7) * flightScale * 1.5, damage: 18)
+            }
             return
         }
         let phase = enemy.hp / enemy.maxHP
@@ -460,7 +459,7 @@ struct GameWorld {
                 if (entities[shot].position - entities[enemy].position).length < entities[enemy].radius + 5 {
                     let target = entities[enemy].kind
                     let standardShot = entities[shot].projectileStyle == .cannon
-                    let damage = standardShot && (target == .scout || target == .armored) ? max(11, entities[shot].damage) : entities[shot].damage
+                    let damage = standardShot && target.isEnemy && target != .boss ? max(11, entities[shot].damage) : entities[shot].damage
                     entities[enemy].hp -= damage
                     entities[enemy].lastHitAt = elapsed
                     effects.append(.impact(entities[shot].position))
@@ -531,13 +530,13 @@ struct GameWorld {
             }
             effects.append(.explosion(enemy.position, false))
             add(.crystal, at: enemy.position, velocity: Vector(x: 0, y: -44))
-            if kills.isMultiple(of: 6) {
-                let weapons: [EntityKind] = [.laser, .spread, .lightning]
-                add(weapons[(kills / 6 - 1) % weapons.count], at: enemy.position + Vector(x: -23, y: 10), velocity: Vector(x: 0, y: -65))
-            }
-            if kills.isMultiple(of: 4) {
-                let supplies: [EntityKind] = [.power, .repair, .shield]
-                add(supplies[(kills / 4 - 1) % supplies.count], at: enemy.position + Vector(x: 23, y: 10), velocity: Vector(x: 0, y: -48))
+            if elapsed >= 28, elapsed - lastSupplyAt >= 22, kills - lastSupplyKills >= 8,
+               (20...(width - 20)).contains(enemy.position.x), (20...(length - 35)).contains(enemy.position.y),
+               !entities.contains(where: { $0.kind.isSupply && $0.hp > 0 }) {
+                let pool = mission.supplyPool.reversed().filter { $0 != .repair || health < loadout.maxHealth * 0.7 }
+                let kind = pool[supplyDropIndex % pool.count]
+                add(kind, at: enemy.position, velocity: Vector(x: 0, y: -48))
+                supplyDropIndex += 1; lastSupplyAt = elapsed; lastSupplyKills = kills
             }
         }
     }

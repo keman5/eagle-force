@@ -88,6 +88,7 @@ final class BattleScene: SKScene {
     private let testPilot = ProcessInfo.processInfo.arguments.contains("-ui-testing") && ProcessInfo.processInfo.arguments.contains("-autopilot")
     private let damageDemo = ProcessInfo.processInfo.arguments.contains("-ui-testing") && ProcessInfo.processInfo.arguments.contains("-damage-demo")
     private var demoStage = 0
+    private var demoCrashRequested = false
     #endif
 
     init(mission: Mission, pilot: PilotProgress) {
@@ -224,7 +225,7 @@ final class BattleScene: SKScene {
         terrainScene?.show(effect, world: world)
         switch effect {
         case .explosion, .rubble, .damage: audio.play("explosion")
-        case .pickup: audio.play("pickup")
+        case let .pickup(_, kind): audio.play(kind == .rescue ? "rescue" : kind == .crystal ? "pickup" : "supply")
         case .beam: audio.play("beam", time: world.elapsed)
         case .lightningArc: audio.play("lightning")
         case .spreadShot: audio.play("spread")
@@ -255,8 +256,8 @@ final class BattleScene: SKScene {
         }
         let targetOffsets = kind == .laser ? [0.0, 0.0, 100.0] : [0.0, 48.0, -48.0]
         for (index, x) in targetOffsets.enumerated() {
-            let point = world.player + Vector(x: x, y: (world.mission.axis == .vertical ? 180 : 120) + Double(index) * 50)
-            world.entities.append(Entity(id: 80_010 + index, kind: .armored, position: point, velocity: .zero,
+            let point = world.player + Vector(x: x, y: (world.mission.axis == .vertical ? 180 : 120) + Double(index) * 62)
+            world.entities.append(Entity(id: 80_010 + index, kind: [EntityKind.scout, .armored, .interceptor][index], position: point, velocity: .zero,
                                          hp: 3000, maxHP: 3000, fireAt: 999, originX: point.x))
         }
         for (index, pickup) in [EntityKind.laser, .spread, .lightning, .escort].enumerated() {
@@ -269,6 +270,7 @@ final class BattleScene: SKScene {
     }
 
     private func prepareDamageDemo() {
+        world.invincibleUntil = .infinity
         if demoStage == 0 {
             let sideways = world.mission.axis == .horizontal
             world.player.x = sideways ? 260 : 150
@@ -282,7 +284,8 @@ final class BattleScene: SKScene {
             }
             demoStage = 1
         }
-        if (demoStage == 1 && world.elapsed >= 2) || (demoStage == 2 && world.elapsed >= 7) {
+        // Keep the critical state observable even when cold shader compilation delays UI automation.
+        if (demoStage == 1 && world.elapsed >= 2) || (demoStage == 2 && demoCrashRequested) {
             world.invincibleUntil = 0
             world.entities.append(Entity(id: 950 + demoStage, kind: .hostile, position: world.player, velocity: .zero, hp: 1, maxHP: 1, originX: world.player.x, damage: demoStage == 1 ? 80 : 25))
             demoStage += 1
@@ -300,6 +303,9 @@ final class BattleScene: SKScene {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard touchID == nil, session?.paused == false, let touch = touches.first else { return }
+        #if DEBUG
+        if damageDemo && demoStage == 2 { demoCrashRequested = true }
+        #endif
         world.stopSteering()
         touchID = touch; lastTouch = touch.location(in: field)
     }

@@ -1,23 +1,23 @@
 import SwiftUI
 
 enum FlightStyle {
-    static let ink = Color(red: 0.025, green: 0.055, blue: 0.09)
-    static let panel = Color(red: 0.055, green: 0.105, blue: 0.15)
-    static let cyan = Color(red: 0.45, green: 0.96, blue: 0.88)
-    static let muted = Color(red: 0.56, green: 0.66, blue: 0.72)
-    static let orange = Color(red: 1, green: 0.72, blue: 0.43)
+    static let ink = Color(red: 0.018, green: 0.012, blue: 0.008)
+    static let panel = Color(red: 0.075, green: 0.045, blue: 0.025)
+    static let cyan = Color(red: 0.02, green: 0.94, blue: 0.93)
+    static let muted = Color(red: 0.60, green: 0.40, blue: 0.25)
+    static let orange = Color(red: 0.94, green: 0.72, blue: 0.42)
 }
 
 struct FlightButtonStyle: ButtonStyle {
     var primary = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .bold))
+            .font(.system(size: 15, weight: .medium))
             .frame(maxWidth: .infinity).padding(.vertical, 17)
-            .foregroundStyle(primary ? FlightStyle.ink : .white)
-            .background(LinearGradient(colors: primary ? [Color(red: 0.9, green: 0.73, blue: 0.39), Color(red: 0.55, green: 0.36, blue: 0.16)] : [FlightStyle.panel, FlightStyle.ink], startPoint: .top, endPoint: .bottom), in: BeveledPanel())
-            .overlay(BeveledPanel().stroke(.white.opacity(0.25), lineWidth: 1))
-            .opacity(configuration.isPressed ? 0.7 : 1)
+            .foregroundStyle(primary ? FlightStyle.cyan : FlightStyle.orange)
+            .background(.black.opacity(0.3))
+            .overlay(Rectangle().stroke((primary ? FlightStyle.cyan : FlightStyle.muted).opacity(0.7), lineWidth: 1))
+            .opacity(configuration.isPressed ? 0.5 : 1)
     }
 }
 
@@ -63,13 +63,15 @@ struct CampaignView: View {
                 }
             } else {
                 if tab == 0 {
-                    campaign
+                    campaign.ignoresSafeArea()
+                } else if tab == 1 {
+                    hangar.ignoresSafeArea()
                 } else {
                     VStack(spacing: 0) {
                         header
                         ScrollView {
                             VStack(spacing: tab == 1 ? 12 : 24) {
-                                if tab == 1 { hangar } else { profile }
+                                profile
                             }.frame(maxWidth: 700).padding(22).frame(maxWidth: .infinity)
                         }
                     }
@@ -126,34 +128,31 @@ struct CampaignView: View {
     }
 
     private var wallet: some View {
-        Label("\(store.pilot.crystals)", systemImage: "diamond.fill")
-            .font(.system(size: 16, weight: .heavy, design: .rounded)).foregroundStyle(FlightStyle.orange)
-            .padding(.horizontal, 13).padding(.vertical, 9).background(.black.opacity(0.55), in: BeveledPanel())
+        Label("\(store.pilot.crystals)", systemImage: "star.fill")
+            .font(.system(size: 22, weight: .semibold, design: .monospaced))
+            .foregroundStyle(Color(red: 1, green: 0.88, blue: 0.25))
             .accessibilityIdentifier("wallet")
     }
 
     private let routePoints: [CGPoint] = [
-        CGPoint(x: 0.25, y: 0.67), CGPoint(x: 0.73, y: 0.55),
-        CGPoint(x: 0.30, y: 0.43), CGPoint(x: 0.76, y: 0.32), CGPoint(x: 0.44, y: 0.21)
+        CGPoint(x: 0.14, y: 0.25), CGPoint(x: 0.34, y: 0.27),
+        CGPoint(x: 0.50, y: 0.17), CGPoint(x: 0.72, y: 0.25), CGPoint(x: 0.51, y: 0.32)
     ]
 
     private var campaign: some View {
         GeometryReader { geo in
             let mission = Mission.campaign[highlightedMissionID - 1]
             let points = routePoints.map { CGPoint(x: $0.x * geo.size.width, y: $0.y * geo.size.height) }
-            let route = Path { path in
+            ZStack(alignment: .topLeading) {
+                RadarBackdrop(continents: true)
+                Path { path in
                     path.move(to: points[0])
-                    for index in 1..<points.count {
-                        let a = points[index - 1], b = points[index]
-                        path.addCurve(to: b, control1: CGPoint(x: a.x, y: b.y + 30), control2: CGPoint(x: b.x, y: a.y - 30))
-                    }
-                }
-            ZStack(alignment: .bottom) {
-                ModelPreview(content: .campaign)
-                    .frame(width: geo.size.width, height: geo.size.height).clipped().ignoresSafeArea()
-                LinearGradient(stops: [.init(color: .black.opacity(0.7), location: 0), .init(color: .clear, location: 0.27), .init(color: .clear, location: 0.65), .init(color: FlightStyle.ink, location: 1)], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
-                route.stroke(.black.opacity(0.6), lineWidth: 5)
-                route.stroke(FlightStyle.orange.opacity(0.85), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [3, 7]))
+                    for point in points.dropFirst() { path.addLine(to: point) }
+                }.stroke(FlightStyle.muted, lineWidth: 1.5)
+                Path { path in
+                    path.move(to: points[0])
+                    for index in 1..<points.count where store.unlocked(index + 1) { path.addLine(to: points[index]) }
+                }.stroke(FlightStyle.cyan, lineWidth: 1.5)
                 ForEach(Mission.campaign) { item in
                     mapNode(item).position(points[item.id - 1])
                 }
@@ -161,165 +160,183 @@ struct CampaignView: View {
                     TimelineView(.animation) { clock in
                         let t = min(1, max(0, clock.date.timeIntervalSince(transfer.started) / 1.8))
                         let a = points[transfer.from - 1], b = points[transfer.to - 1]
-                        let point = flightPoint(from: a, to: b, t: t)
-                        let ahead = flightPoint(from: a, to: b, t: min(1, t + 0.01))
-                        ModelPreview(content: .aircraft).frame(width: 48, height: 48)
-                            .rotationEffect(.radians(atan2(ahead.y - point.y, ahead.x - point.x) + .pi / 2))
-                            .shadow(color: FlightStyle.cyan.opacity(0.8), radius: 8)
-                            .position(point)
+                        Image(systemName: "airplane").font(.system(size: 22))
+                            .foregroundStyle(FlightStyle.cyan)
+                            .rotationEffect(.radians(atan2(b.y - a.y, b.x - a.x)))
+                            .position(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
                     }.allowsHitTesting(false).accessibilityLabel("战机飞往第 \(transfer.to) 关")
                         .accessibilityIdentifier("campaign-flight")
                 }
-                VStack(spacing: 14) {
-                    HStack(alignment: .bottom) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("战区 " + String(format: "%02d", mission.id) + "  /  " + mission.axisLabel)
-                                .font(.system(size: 10, weight: .bold)).tracking(2).foregroundStyle(FlightStyle.orange)
-                            Text(mission.title).font(.system(size: 30, weight: .black))
-                                .shadow(color: .black, radius: 4).accessibilityIdentifier("selected-mission")
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 6) {
-                            Text("◆ +\(mission.firstClear)").font(.system(size: 15, weight: .heavy, design: .rounded)).foregroundStyle(FlightStyle.orange)
-                            Text("首次解放").font(.system(size: 10)).foregroundStyle(FlightStyle.muted)
-                        }
-                    }
-                    Button { dossier = mission } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "waveform")
-                            Text(mission.story.chapter).font(.system(size: 12, weight: .medium))
-                            Spacer()
-                            Text("战情与人物").font(.system(size: 11, weight: .bold))
-                            Image(systemName: "chevron.right")
-                        }.foregroundStyle(FlightStyle.cyan).padding(.vertical, 11)
-                    }.accessibilityIdentifier("open-dossier")
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("关").font(.system(size: 27, weight: .light))
+                        Text(String(format: "%02d", mission.id)).font(.system(size: 29, weight: .bold, design: .monospaced))
+                        Text(mission.title).font(.system(size: 14, weight: .light))
+                            .accessibilityIdentifier("selected-mission")
+                    }.foregroundStyle(FlightStyle.orange)
+                    Text(mission.subtitle).font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .tracking(1).foregroundStyle(FlightStyle.muted).padding(.top, 8)
+                    Text("新补给 / " + mission.newSupplyTitle)
+                        .font(.system(size: 10)).foregroundStyle(FlightStyle.orange).padding(.top, 6)
+                    Rectangle().fill(FlightStyle.radarLine).frame(height: 1).padding(.top, 9)
                     HStack(spacing: 12) {
-                        Button { tab = 1 } label: {
-                            VStack(spacing: 4) {
-                                ModelPreview(content: .aircraft).frame(width: 42, height: 36)
-                                Text("整备机库").font(.system(size: 10, weight: .heavy))
-                            }.foregroundStyle(.white).frame(width: 80, height: 67)
-                                .background(LinearGradient(colors: [Color(white: 0.25), Color(white: 0.09)], startPoint: .top, endPoint: .bottom), in: BeveledPanel())
-                                .overlay(BeveledPanel().stroke(.white.opacity(0.25), lineWidth: 1))
-                        }.accessibilityIdentifier("open-hangar")
-                        Button { start(mission) } label: {
-                            HStack(spacing: 16) {
-                                Text("出  击").font(.system(size: 26, weight: .black))
-                                Image(systemName: "chevron.right.2").font(.system(size: 18, weight: .black))
-                            }.frame(height: 33)
-                        }.buttonStyle(FlightButtonStyle(primary: true))
-                            .disabled(!store.unlocked(mission.id) || transfer != nil).accessibilityIdentifier("launch-mission")
-                    }
-                }.padding(.horizontal, 22).padding(.bottom, 18)
-            }
-            .overlay(alignment: .top) {
-                VStack(alignment: .leading, spacing: 13) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("苍穹突击").font(.system(size: 34, weight: .black)).tracking(5)
-                                .shadow(color: .black.opacity(0.8), radius: 5, y: 3)
-                            Text("E A G L E   F O R C E").font(.system(size: 9, weight: .heavy)).foregroundStyle(FlightStyle.orange)
-                        }
+                        Text("首次解放").font(.system(size: 15, weight: .light)).foregroundStyle(FlightStyle.muted)
+                        Text(store.pilot.medals[mission.id, default: []].contains("clear") ? "已领取" : "★ +\(mission.firstClear)")
+                            .font(.system(size: 20, weight: .semibold, design: .monospaced)).foregroundStyle(FlightStyle.orange)
                         Spacer()
-                        Button { tab = 2 } label: {
-                            Image(systemName: "gearshape.fill").font(.system(size: 21)).foregroundStyle(.white)
-                                .frame(width: 48, height: 48).background(.black.opacity(0.55), in: BeveledPanel())
-                                .overlay(BeveledPanel().stroke(.white.opacity(0.2), lineWidth: 1))
-                        }.accessibilityLabel("设置与飞行档案").accessibilityIdentifier("open-profile")
-                    }
-                    HStack {
-                        Text("破晓防线  ·  \(store.pilot.medalCount)/15 ★")
-                            .font(.system(size: 11, weight: .bold)).foregroundStyle(.white.opacity(0.8))
-                        Spacer()
-                        wallet
-                    }
-                }.padding(.horizontal, 22).padding(.top, 12)
-            }
+                        Text(mission.axisLabel).font(.system(size: 10)).foregroundStyle(FlightStyle.muted)
+                    }.frame(height: geo.size.height * 0.064)
+                    Rectangle().fill(FlightStyle.radarLine).frame(height: 1)
+                    VStack(alignment: .leading, spacing: 16) {
+                        missionObjective("clear", title: "击败战区指挥官", mission: mission)
+                        missionObjective("rescue", title: "救回所有飞行员", mission: mission)
+                        missionObjective("armor", title: "护甲保持 60% 以上", mission: mission)
+                    }.padding(.top, 18).padding(.leading, -32)
+                }.frame(width: geo.size.width * 0.78).position(x: geo.size.width * 0.5, y: geo.size.height * 0.524)
+                Button { dossier = mission } label: {
+                    RoundControl(symbol: "waveform", size: 40)
+                }.accessibilityLabel("战情与人物").accessibilityIdentifier("open-dossier")
+                    .position(x: geo.size.width * 0.78, y: geo.size.height * 0.805)
+                Button { tab = 2 } label: { RoundControl(symbol: "list.bullet", size: 42) }
+                    .accessibilityLabel("设置与飞行档案").accessibilityIdentifier("open-profile")
+                    .position(x: geo.size.width * 0.16, y: geo.size.height * 0.90)
+                Button { start(mission) } label: {
+                    LaunchCircle(title: "START", subtitle: "出击 / \(String(format: "%02d", mission.id))", diameter: geo.size.width * 0.39)
+                }.buttonStyle(.plain).disabled(!store.unlocked(mission.id) || transfer != nil)
+                    .accessibilityLabel("出击，第 \(mission.id) 关").accessibilityIdentifier("launch-mission")
+                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.90)
+                Button { tab = 1 } label: { RoundControl(symbol: "airplane", size: 58) }
+                    .accessibilityLabel("整备机库").accessibilityIdentifier("open-hangar")
+                    .position(x: geo.size.width * 0.84, y: geo.size.height * 0.90)
+            }.buttonStyle(.plain)
         }
     }
 
-    private func flightPoint(from a: CGPoint, to b: CGPoint, t: Double) -> CGPoint {
-        let u = 1 - t
-        return CGPoint(x: u * u * u * a.x + 3 * u * u * t * a.x + 3 * u * t * t * b.x + t * t * t * b.x,
-                       y: u * u * u * a.y + 3 * u * u * t * (b.y + 30) + 3 * u * t * t * (a.y - 30) + t * t * t * b.y)
+    private func missionObjective(_ key: String, title: String, mission: Mission) -> some View {
+        let earned = store.pilot.medals[mission.id, default: []].contains(key)
+        return HStack(spacing: 14) {
+            Image(systemName: earned ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 19, weight: .light)).foregroundStyle(earned ? FlightStyle.cyan : FlightStyle.radarLine)
+            Text(title).font(.system(size: 15, weight: .light))
+        }.foregroundStyle(earned ? FlightStyle.cyan : FlightStyle.muted)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title + (earned ? "，勋章已获得" : "，通关达成 · 首次 +100"))
+            .accessibilityIdentifier("objective-\(key)")
     }
 
     private func mapNode(_ mission: Mission) -> some View {
         let unlocked = store.unlocked(mission.id)
         let active = highlightedMissionID == mission.id
+        let tint = unlocked ? FlightStyle.cyan : FlightStyle.orange.opacity(0.75)
         let medals = store.pilot.medals[mission.id, default: []].count
         return Button { highlightedMissionID = mission.id } label: {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle().fill(.black.opacity(0.4)).frame(width: 58, height: 58).offset(y: 4)
-                    Circle().fill(LinearGradient(colors: [Color(white: active ? 0.66 : 0.4), Color(white: 0.12)], startPoint: .topLeading, endPoint: .bottomTrailing)).frame(width: 52, height: 52)
-                    Circle().fill(FlightStyle.ink).frame(width: 43, height: 43)
-                    Circle().stroke(active ? FlightStyle.orange : .white.opacity(0.4), lineWidth: active ? 3 : 1).frame(width: 49, height: 49)
-                    if unlocked {
-                        Text(String(format: "%02d", mission.id)).font(.system(size: 22, weight: .black, design: .rounded)).foregroundStyle(active ? FlightStyle.orange : .white)
-                    } else {
-                        Image(systemName: "lock.fill").font(.system(size: 17)).foregroundStyle(FlightStyle.muted)
-                    }
+            ZStack {
+                Circle().fill(active ? tint : FlightStyle.ink).padding(active ? 7 : 3)
+                Circle().stroke(tint, lineWidth: 2.5)
+                if active { Circle().stroke(tint, lineWidth: 1).padding(5) }
+                if unlocked {
+                    Text(String(format: "%02d", mission.id))
+                        .font(.system(size: 17, weight: .bold, design: .monospaced))
+                        .foregroundStyle(active ? FlightStyle.ink : tint)
+                } else {
+                    Image(systemName: "lock.fill").font(.system(size: 17)).foregroundStyle(tint)
                 }
-                HStack(spacing: 3) {
-                    ForEach(0..<3) { index in Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(index < medals ? FlightStyle.orange : .white.opacity(0.35)) }
-                }.padding(.horizontal, 7).padding(.vertical, 3).background(.black.opacity(0.6), in: Capsule())
-            }.frame(width: 74, height: 82)
-        }.buttonStyle(.plain).disabled(!unlocked || transfer != nil)
+            }.frame(width: 40, height: 40)
+                .overlay(alignment: .topTrailing) {
+                    HStack(spacing: 3) {
+                        ForEach(0..<3) { index in
+                            Circle().fill(index < medals ? FlightStyle.orange : .clear)
+                                .overlay(Circle().stroke(FlightStyle.muted, lineWidth: 1)).frame(width: 5, height: 5)
+                        }
+                    }.offset(x: 20, y: -7)
+                }.frame(width: 48, height: 48)
+        }.disabled(!unlocked || transfer != nil)
             .accessibilityLabel("第 \(mission.id) 关，\(mission.title)，\(unlocked ? "已解锁" : "未解锁")")
             .accessibilityIdentifier("mission-\(mission.id)")
     }
 
     private var hangar: some View {
-        Group {
-            HStack(alignment: .firstTextBaseline) {
-                Text("整备机库").font(.system(size: 22, weight: .heavy))
-                Spacer()
-                Text("EF–01 / DAWN").font(.system(size: 10, weight: .bold, design: .monospaced)).tracking(2).foregroundStyle(FlightStyle.muted)
-            }
+        GeometryReader { geo in
             ZStack {
-                ModelPreview(content: .hangar)
-                VStack {
-                    HStack { Text("01  /  拂晓截击机"); Spacer(); Text("● READY").foregroundStyle(FlightStyle.cyan) }
-                    Spacer()
-                    HStack(alignment: .bottom) {
-                        VStack(alignment: .leading, spacing: 4) { Text("机炮 MK.\(store.pilot.loadout.weapon + 1)"); Text("装甲 \(Int(store.pilot.loadout.maxHealth))") }
-                        Spacer()
-                        Text("整备完成 / 可出击").foregroundStyle(FlightStyle.cyan)
+                RadarBackdrop(continents: false)
+                AircraftBlueprint().stroke(FlightStyle.radarLine, lineWidth: 1.2)
+                    .frame(width: geo.size.width * 0.62, height: geo.size.height * 0.48)
+                    .position(x: geo.size.width * 0.08, y: geo.size.height * 0.52)
+                Path { path in
+                    for y in [0.26, 0.39, 0.52, 0.65, 0.75, 0.85] {
+                        path.move(to: CGPoint(x: geo.size.width * 0.08, y: geo.size.height * (0.39 + y * 0.38)))
+                        path.addLine(to: CGPoint(x: geo.size.width * 0.32, y: geo.size.height * y))
+                        path.addLine(to: CGPoint(x: geo.size.width, y: geo.size.height * y))
                     }
-                }.font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(FlightStyle.muted).padding(13)
-            }.frame(height: 235)
-                .overlay(alignment: .bottom) { Rectangle().fill(FlightStyle.cyan.opacity(0.45)).frame(height: 1) }
-            ForEach(Upgrade.allCases, id: \.self) { upgrade in
-                let level = store.pilot.loadout[upgrade]
-                HStack(spacing: 13) {
-                    Image(systemName: upgrade == .weapon ? "scope" : upgrade == .armor ? "shield.lefthalf.filled" : "dot.radiowaves.left.and.right")
-                        .font(.system(size: 22, weight: .light)).foregroundStyle(FlightStyle.cyan).frame(width: 30)
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(upgrade.title).font(.system(size: 13, weight: .bold))
-                            Text("LV. \(level) / 4").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(FlightStyle.muted)
-                        }
-                        HStack(spacing: 3) {
-                            ForEach(0..<4) { index in Rectangle().fill(index < level ? FlightStyle.cyan : .white.opacity(0.12)).frame(width: 26, height: 3) }
-                        }
-                        Text(upgrade.detail).font(.system(size: 9)).foregroundStyle(FlightStyle.muted).lineLimit(2)
-                    }
-                    Spacer(minLength: 0)
-                    Button { store.purchase(upgrade) } label: {
-                        VStack(spacing: 4) {
-                            Text(level < 4 ? "改装 ↑" : "已满级").font(.system(size: 11, weight: .heavy))
-                            if level < 4 { Text("◆ \(Upgrade.prices[level])").font(.system(size: 11, weight: .bold, design: .monospaced)) }
-                        }.foregroundStyle(FlightStyle.orange).frame(width: 64, height: 52)
-                            .background(FlightStyle.orange.opacity(0.08), in: BeveledPanel())
-                            .overlay(BeveledPanel().stroke(FlightStyle.orange.opacity(0.4), lineWidth: 1))
-                    }.disabled(level >= 4 || store.pilot.crystals < Upgrade.prices[min(level, 3)])
-                        .opacity(level < 4 && store.pilot.crystals >= Upgrade.prices[min(level, 3)] ? 1 : 0.4)
-                        .accessibilityLabel("\(upgrade.title)，\(level < 4 ? String(Upgrade.prices[level]) + " 星晶" : "已满级")")
-                        .accessibilityIdentifier("upgrade-\(upgrade.rawValue)")
-                }.padding(.vertical, 9).overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.1)).frame(height: 1) }
-            }
+                }.stroke(FlightStyle.radarLine, lineWidth: 1)
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: geo.size.height * 0.26))
+                    path.addLine(to: CGPoint(x: geo.size.width * 0.16, y: geo.size.height * 0.26))
+                    path.addLine(to: CGPoint(x: geo.size.width * 0.65, y: 0))
+                    path.addEllipse(in: CGRect(x: geo.size.width * 0.20, y: geo.size.height * 0.12, width: geo.size.width * 0.18, height: geo.size.width * 0.18))
+                }.stroke(FlightStyle.radarLine, lineWidth: 1)
+                if store.pilot.loadout.weapon > 0 {
+                    Path { path in
+                        let x = geo.size.width * 0.08, y = geo.size.height * 0.40
+                        path.addRoundedRect(in: CGRect(x: x - 2, y: y, width: 4, height: geo.size.height * 0.095), cornerSize: CGSize(width: 2, height: 2))
+                        path.addRoundedRect(in: CGRect(x: x - 7, y: y + geo.size.height * 0.075, width: 14, height: geo.size.height * 0.035), cornerSize: CGSize(width: 3, height: 3))
+                    }.stroke(FlightStyle.orange.opacity(0.9), lineWidth: 1.5).allowsHitTesting(false)
+                }
+                wallet.position(x: geo.size.width * 0.32, y: geo.size.height * 0.16)
+                ForEach(Array(Upgrade.allCases.enumerated()), id: \.element) { index, upgrade in
+                    upgradeRow(upgrade).frame(width: geo.size.width * 0.52)
+                        .position(x: geo.size.width * 0.735, y: geo.size.height * (0.26 + Double(index) * 0.13))
+                }
+                ForEach(Array([("激光 / 散弹 / 雷电", "战场拾取 · 持续 12 秒"), ("能量护盾", "青色补给 · 抵挡一次伤害"), ("EMP 脉冲", "每次出击 2 次 · 救援补充")].enumerated()), id: \.offset) { index, item in
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Text(item.0).font(.system(size: 14, weight: .light)).foregroundStyle(FlightStyle.muted)
+                        Capsule().fill(FlightStyle.radarLine).frame(height: 9)
+                            .overlay(alignment: .leading) { Circle().fill(.black).overlay(Circle().stroke(FlightStyle.radarLine, lineWidth: 2)).frame(width: 18, height: 18) }
+                        Text(item.1).font(.system(size: 9)).foregroundStyle(FlightStyle.muted)
+                    }.frame(width: geo.size.width * 0.34)
+                        .position(x: geo.size.width * 0.66, y: geo.size.height * (0.65 + Double(index) * 0.10) - 1)
+                }
+                Button { tab = 0 } label: { RoundControl(symbol: "chevron.left.2", size: 58) }
+                    .accessibilityLabel("返回战区").accessibilityIdentifier("return-map")
+                    .position(x: geo.size.width * 0.16, y: geo.size.height * 0.90)
+            }.buttonStyle(.plain)
         }
+    }
+
+    private func upgradeRow(_ upgrade: Upgrade) -> some View {
+        let level = store.pilot.loadout[upgrade]
+        let affordable = level < 4 && store.pilot.crystals >= Upgrade.prices[min(level, 3)]
+        return HStack(spacing: 14) {
+            VStack(alignment: .trailing, spacing: 7) {
+                Text(upgrade.title).font(.system(size: 14, weight: .light)).foregroundStyle(FlightStyle.orange)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().stroke(FlightStyle.orange, lineWidth: 1.5)
+                        HStack(spacing: 2) {
+                            ForEach(0..<12) { index in
+                                Parallelogram().fill(index < level * 3 ? FlightStyle.orange : FlightStyle.orange.opacity(0.08))
+                                    .overlay(Parallelogram().stroke(FlightStyle.orange.opacity(0.6), lineWidth: 0.7))
+                            }
+                        }.padding(.horizontal, 5).padding(.vertical, 2)
+                        Circle().fill(FlightStyle.ink).overlay(Circle().stroke(FlightStyle.orange, lineWidth: 2))
+                            .frame(width: 18, height: 18).offset(x: -8)
+                    }.frame(width: geo.size.width, height: 10)
+                }.frame(height: 10)
+                HStack(spacing: 3) {
+                    Text("LV. \(level) / 4").font(.system(size: 8, design: .monospaced)).foregroundStyle(FlightStyle.muted)
+                    Spacer(minLength: 0)
+                    Text(level < 4 ? "\(Upgrade.prices[level]) ★" : "MAX")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(affordable ? FlightStyle.orange : FlightStyle.muted)
+                }
+            }
+            Button { store.purchase(upgrade) } label: {
+                RoundControl(symbol: level < 4 ? "chevron.up.2" : "checkmark", size: 39,
+                             tint: affordable ? FlightStyle.cyan : FlightStyle.radarLine)
+            }.disabled(!affordable)
+                .accessibilityLabel("\(upgrade.title)，\(level < 4 ? String(Upgrade.prices[level]) + " 星晶" : "已满级")")
+                .accessibilityHint(upgrade.detail).accessibilityIdentifier("upgrade-\(upgrade.rawValue)")
+        }.padding(.trailing, 7)
     }
 
     private var profile: some View {
@@ -371,5 +388,119 @@ struct BeveledPanel: Shape {
             p.addLine(to: CGPoint(x: 0, y: cut))
             p.closeSubpath()
         }
+    }
+}
+
+
+extension FlightStyle {
+    static let radarLine = Color(red: 0.35, green: 0.12, blue: 0.035)
+}
+
+struct RoundControl: View {
+    let symbol: String
+    var size: CGFloat = 44
+    var tint: Color = FlightStyle.cyan
+    var body: some View {
+        Image(systemName: symbol).font(.system(size: size * 0.42, weight: .bold))
+            .foregroundStyle(tint).frame(width: size, height: size)
+            .background(.black.opacity(0.5), in: Circle())
+            .overlay(Circle().stroke(tint, lineWidth: 2.5))
+            .shadow(color: tint.opacity(0.2), radius: 3)
+            .frame(minWidth: 44, minHeight: 44).contentShape(Circle())
+    }
+}
+
+struct LaunchCircle: View {
+    let title: String
+    let subtitle: String
+    var diameter: CGFloat = 155
+    var body: some View {
+        ZStack {
+            Circle().strokeBorder(FlightStyle.cyan, lineWidth: 7)
+                .mask(LinearGradient(stops: [.init(color: .white, location: 0), .init(color: .white, location: 0.5), .init(color: .clear, location: 0.80)], startPoint: .top, endPoint: .bottom))
+            VStack(spacing: 7) {
+                Text(subtitle).font(.system(size: 12, weight: .medium)).foregroundStyle(FlightStyle.muted)
+                Text(title).font(.system(size: 27, weight: .bold, design: .monospaced)).foregroundStyle(FlightStyle.cyan)
+            }
+        }.frame(width: diameter, height: diameter).contentShape(Circle())
+    }
+}
+
+struct Parallelogram: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { p in
+            p.move(to: CGPoint(x: 0, y: 0)); p.addLine(to: CGPoint(x: rect.width * 0.72, y: 0))
+            p.addLine(to: CGPoint(x: rect.width, y: rect.height)); p.addLine(to: CGPoint(x: rect.width * 0.28, y: rect.height)); p.closeSubpath()
+        }
+    }
+}
+
+struct RadarBackdrop: View {
+    var continents = false
+    var body: some View {
+        Canvas { context, size in
+            let bounds = CGRect(origin: .zero, size: size)
+            context.fill(Path(bounds), with: .color(.black))
+            context.fill(Path(bounds), with: .radialGradient(Gradient(colors: [Color(red: 0.24, green: 0.11, blue: 0.012), .clear]), center: CGPoint(x: size.width * 0.52, y: size.height * 0.13), startRadius: 0, endRadius: size.height * 0.49))
+            if continents {
+                // Original coastline coordinates; the reference is used for composition only.
+                let land: [[CGPoint]] = [
+                    [CGPoint(x: -0.08,y: 0.12),CGPoint(x: 0.02,y: 0.09),CGPoint(x: 0.08,y: 0.12),CGPoint(x: 0.06,y: 0.17),CGPoint(x: 0.12,y: 0.20),CGPoint(x: 0.08,y: 0.22),CGPoint(x: 0.19,y: 0.18),CGPoint(x: 0.28,y: 0.19),CGPoint(x: 0.36,y: 0.15),CGPoint(x: 0.44,y: 0.16),CGPoint(x: 0.43,y: 0.12),CGPoint(x: 0.54,y: 0.10),CGPoint(x: 0.65,y: 0.07),CGPoint(x: 0.69,y: 0.045),CGPoint(x: 0.75,y: 0.05),CGPoint(x: 0.73,y: 0.09),CGPoint(x: 0.66,y: 0.13),CGPoint(x: 0.72,y: 0.16),CGPoint(x: 0.67,y: 0.18),CGPoint(x: 0.72,y: 0.22),CGPoint(x: 0.68,y: 0.27),CGPoint(x: 0.59,y: 0.28),CGPoint(x: 0.60,y: 0.33),CGPoint(x: 0.56,y: 0.37),CGPoint(x: 0.48,y: 0.38),CGPoint(x: 0.45,y: 0.34),CGPoint(x: 0.42,y: 0.31),CGPoint(x: 0.46,y: 0.28),CGPoint(x: 0.38,y: 0.26),CGPoint(x: 0.32,y: 0.28),CGPoint(x: 0.27,y: 0.32),CGPoint(x: 0.21,y: 0.31),CGPoint(x: 0.19,y: 0.36),CGPoint(x: 0.13,y: 0.34),CGPoint(x: 0.08,y: 0.39),CGPoint(x: -0.05,y: 0.38)],
+                    [CGPoint(x: 0.73,y: 0.11),CGPoint(x: 0.79,y: 0.07),CGPoint(x: 0.88,y: 0.08),CGPoint(x: 0.91,y: 0.04),CGPoint(x: 1.1,y: 0.06),CGPoint(x: 1.1,y: 0.36),CGPoint(x: 0.95,y: 0.33),CGPoint(x: 0.91,y: 0.30),CGPoint(x: 0.87,y: 0.31),CGPoint(x: 0.82,y: 0.27),CGPoint(x: 0.87,y: 0.24),CGPoint(x: 0.84,y: 0.21),CGPoint(x: 0.79,y: 0.22),CGPoint(x: 0.77,y: 0.18)],
+                    [CGPoint(x: 0.28,y: 0.10),CGPoint(x: 0.34,y: 0.09),CGPoint(x: 0.39,y: 0.11),CGPoint(x: 0.35,y: 0.14),CGPoint(x: 0.30,y: 0.13)]
+                ]
+                for coast in land {
+                    let path = Path { p in
+                        p.move(to: CGPoint(x: coast[0].x * size.width, y: coast[0].y * size.height))
+                        for index in coast.indices {
+                            let a = CGPoint(x: coast[index].x * size.width, y: coast[index].y * size.height)
+                            let b = CGPoint(x: coast[(index + 1) % coast.count].x * size.width, y: coast[(index + 1) % coast.count].y * size.height)
+                            let dx = b.x - a.x, dy = b.y - a.y, length = max(1, hypot(dx, dy))
+                            let steps = max(3, Int(length / 3))
+                            for step in 1...steps {
+                                let t = Double(step) / Double(steps)
+                                let ripple = sin(t * .pi) * (sin(t * 19 + Double(index) * 2.7) + sin(t * 43 + Double(index))) * size.width * 0.004
+                                p.addLine(to: CGPoint(x: a.x + dx * t - dy / length * ripple,
+                                                     y: a.y + dy * t + dx / length * ripple))
+                            }
+                        }
+                        p.closeSubpath()
+                    }
+                    context.fill(path, with: .linearGradient(Gradient(colors: [Color(red: 0.34, green: 0.19, blue: 0.015), Color(red: 0.14, green: 0.075, blue: 0.008)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height * 0.42)))
+                }
+                var grid = Path()
+                let step = size.width / 8.6
+                for x in stride(from: step * 0.55, through: size.width, by: step) { grid.move(to: CGPoint(x: x, y: 0)); grid.addLine(to: CGPoint(x: x, y: size.height)) }
+                for y in stride(from: step * 0.7, through: size.height, by: step) { grid.move(to: CGPoint(x: 0, y: y)); grid.addLine(to: CGPoint(x: size.width, y: y)) }
+                context.stroke(grid, with: .linearGradient(Gradient(stops: [.init(color: FlightStyle.radarLine.opacity(0.25), location: 0), .init(color: FlightStyle.radarLine.opacity(0.20), location: 0.85), .init(color: .clear, location: 0.96)]), startPoint: .zero, endPoint: CGPoint(x: 0, y: size.height)), lineWidth: 1)
+            }
+        }.allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
+struct AircraftBlueprint: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        func line(_ coordinates: [(Double, Double)], closed: Bool = false) {
+            for (i, pt) in coordinates.enumerated() {
+                let point = CGPoint(x: pt.0 * rect.width, y: pt.1 * rect.height)
+                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            if closed { path.closeSubpath() }
+        }
+        line([(0.5,0.01),(0.55,0.04),(0.59,0.29),(0.94,0.57),(0.98,0.72),(0.63,0.61),(0.63,0.83),(0.77,0.93),(0.77,0.99),(0.51,0.94),(0.23,0.99),(0.23,0.93),(0.37,0.83),(0.37,0.61),(0.02,0.72),(0.06,0.57),(0.41,0.29),(0.45,0.04)], closed: true)
+        line([(0.5,0.06),(0.53,0.18),(0.54,0.43),(0.46,0.43),(0.47,0.18)], closed: true)
+        line([(0.48,0.20),(0.52,0.20),(0.54,0.34),(0.46,0.34)], closed: true)
+        for flip in [false, true] {
+            func mirror(_ points: [(Double,Double)], closed: Bool = false) { line(points.map { (flip ? 1-$0.0 : $0.0, $0.1) }, closed: closed) }
+            mirror([(0.39,0.39),(0.10,0.60),(0.09,0.66),(0.37,0.56)], closed: true)
+            mirror([(0.30,0.47),(0.30,0.80),(0.34,0.88),(0.40,0.88),(0.43,0.78),(0.43,0.47)], closed: true)
+            mirror([(0.33,0.52),(0.39,0.52),(0.39,0.79),(0.33,0.79)], closed: true)
+            mirror([(0.32,0.83),(0.41,0.83)])
+            mirror([(0.37,0.87),(0.29,0.94),(0.46,0.91)])
+            mirror([(0.17,0.52),(0.17,0.39),(0.20,0.39),(0.20,0.55)])
+        }
+        line([(0.48,0.48),(0.52,0.48),(0.55,0.82),(0.50,0.89),(0.45,0.82)], closed: true)
+        return path
     }
 }

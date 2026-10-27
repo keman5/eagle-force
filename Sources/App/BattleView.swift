@@ -102,7 +102,7 @@ struct BattleView: View {
                         Text(hint).font(.system(size: 12, weight: .bold))
                             .foregroundStyle(Color(red: 1, green: 0.9, blue: 0.63))
                             .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(FlightStyle.ink.opacity(0.92), in: Capsule())
+                            .shadow(color: .black, radius: 3)
                             .accessibilityIdentifier("rescue-hint").allowsHitTesting(false)
                     }
                     Spacer()
@@ -115,29 +115,24 @@ struct BattleView: View {
                             Text(session.status).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8))
                             HStack(spacing: 14) {
                                 Label("\(session.rescued) / 3", systemImage: "person.fill.checkmark")
-                                Label("\(session.crystals)", systemImage: "diamond.fill").foregroundStyle(FlightStyle.orange)
+                                Label("\(session.crystals)", systemImage: "star.fill").foregroundStyle(FlightStyle.orange)
                             }.font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(FlightStyle.cyan)
-                        }.padding(.leading, 10)
-                            .overlay(alignment: .leading) { Rectangle().fill(FlightStyle.cyan.opacity(0.65)).frame(width: 2) }
+                        }
                             .shadow(color: .black, radius: 3).allowsHitTesting(false)
                         Spacer(minLength: 10)
                         Button { session.pulse() } label: {
-                            ZStack {
-                                Circle().fill(FlightStyle.ink.opacity(0.65))
-                                Circle().stroke(FlightStyle.cyan.opacity(0.5), lineWidth: 1)
-                                Circle().trim(from: 0.06, to: 0.94).stroke(FlightStyle.cyan, lineWidth: 3).padding(5).rotationEffect(.degrees(90))
-                                VStack(spacing: 3) {
-                                    Image(systemName: "bolt.fill").font(.system(size: 23))
-                                    Text("EMP · \(session.empCharges)").font(.system(size: 9, weight: .bold, design: .monospaced))
+                            RoundControl(symbol: "bolt.fill", size: 43)
+                                .overlay(alignment: .bottomTrailing) {
+                                    Text("\(session.empCharges)").font(.system(size: 11, weight: .bold, design: .monospaced))
+                                        .foregroundStyle(FlightStyle.cyan).offset(x: 3, y: 5)
                                 }
-                            }.foregroundStyle(FlightStyle.cyan).frame(width: 66, height: 66)
                         }.disabled(session.empCharges == 0 || session.paused || session.crashing || session.bossFalling || session.result != nil)
                             .opacity(session.empCharges == 0 ? 0.4 : 1).accessibilityLabel("释放 EMP，剩余 \(session.empCharges) 次").accessibilityIdentifier("emp-button")
                     }.padding(.horizontal, landscape ? 22 : 18).padding(.bottom, 10)
-                    ZStack(alignment: .bottom) {
-                        if let line = session.radioLine { RadioCard(line: line, compact: true) }
-                    }.frame(height: 96, alignment: .bottom).padding(.horizontal, 18).padding(.bottom, 6)
-                        .allowsHitTesting(false)
+                    if let line = session.radioLine {
+                        RadioCard(line: line, compact: true).padding(.horizontal, 18).padding(.bottom, 6)
+                            .allowsHitTesting(false)
+                    }
                 }
                 if session.crashing, session.result == nil {
                     VStack(spacing: 7) {
@@ -181,64 +176,75 @@ struct BattleView: View {
     }
 
     private func hud(landscape: Bool) -> some View {
-        VStack(spacing: 10) {
-            HStack(alignment: .center, spacing: 15) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(String(format: "%02d", session.mission.id) + " / " + session.mission.title)
-                        .font(.system(size: landscape ? 12 : 14, weight: .bold)).accessibilityIdentifier("battle-title")
-                    HStack(spacing: 6) {
-                        Text("HULL").font(.system(size: 8, weight: .heavy, design: .monospaced))
-                        HStack(spacing: 2) {
-                            ForEach(0..<20) { index in
-                                Rectangle().fill(Double(index) / 20 < session.health ? (session.health <= 0.25 ? Color.red : FlightStyle.cyan) : .white.opacity(0.12))
-                            }
-                        }.frame(width: landscape ? 105 : 115, height: 7)
-                        Text("\(Int(session.health * 100))").font(.system(size: 10, weight: .heavy, design: .monospaced))
-                    }.foregroundStyle(session.health <= 0.25 ? .red : FlightStyle.cyan)
-                        .accessibilityElement(children: .ignore).accessibilityLabel("机体耐久 \(Int(session.health * 100))%")
-                        .accessibilityIdentifier("player-health")
-                }
-                Spacer()
-                if landscape { Text(session.mission.subtitle).font(.system(size: 9, weight: .medium, design: .monospaced)).tracking(2).foregroundStyle(FlightStyle.muted) }
+        VStack(spacing: 6) {
+            HStack(alignment: .center, spacing: 12) {
                 Button { session.cycleSpeed() } label: {
                     Text(session.gameSpeed == 1.5 ? "1.5×" : "\(Int(session.gameSpeed))×")
-                        .font(.system(size: 13, weight: .heavy, design: .monospaced))
-                        .frame(width: 44, height: 44).background(FlightStyle.ink.opacity(0.65), in: BeveledPanel())
+                        .font(.system(size: 13, weight: .bold, design: .monospaced)).frame(width: 44, height: 44)
                 }.foregroundStyle(FlightStyle.cyan).accessibilityIdentifier("game-speed")
                     .accessibilityLabel("游戏速度 \(session.gameSpeed.formatted()) 倍")
                     .disabled(session.paused || session.crashing || session.bossFalling || session.result != nil)
+                DigitalReadout(value: session.crystals)
+                    .frame(maxWidth: 240).frame(height: 27)
+                    .accessibilityElement(children: .ignore).accessibilityLabel("本次星晶 \(session.crystals)")
                 Button { session.pause(true) } label: {
-                    Image(systemName: "pause.fill").font(.system(size: 17)).frame(width: 44, height: 44)
-                        .background(FlightStyle.ink.opacity(0.45), in: BeveledPanel())
-                        .overlay(BeveledPanel().stroke(.white.opacity(0.25), lineWidth: 1))
-                }.foregroundStyle(.white).accessibilityLabel("暂停").accessibilityIdentifier("pause-button")
+                    Image(systemName: "pause.circle.fill").font(.system(size: 27)).frame(width: 44, height: 44)
+                }.foregroundStyle(FlightStyle.cyan).accessibilityLabel("暂停").accessibilityIdentifier("pause-button")
             }
-            if let bossHealth = session.bossHealth {
-                HStack(spacing: 10) {
-                    Text(session.mission.boss).font(.system(size: 9, weight: .bold)).foregroundStyle(FlightStyle.orange)
-                    ProgressView(value: max(0, bossHealth)).tint(FlightStyle.orange)
-                }.accessibilityIdentifier("boss-health")
-            } else {
-                ProgressView(value: session.progress).tint(FlightStyle.cyan.opacity(0.6)).scaleEffect(y: 0.5)
-            }
-        }.padding(.horizontal, landscape ? 24 : 20).padding(.top, 8).padding(.bottom, 12)
-            .background(LinearGradient(colors: [FlightStyle.ink.opacity(0.94), FlightStyle.ink.opacity(0)], startPoint: .top, endPoint: .bottom))
+            VStack(spacing: 5) {
+                ProgressView(value: session.progress).tint(FlightStyle.cyan.opacity(0.8)).scaleEffect(y: 0.4)
+                HStack(spacing: 3) {
+                    ForEach(0..<20) { index in
+                        Rectangle().fill(Double(index) / 20 < session.health ? (session.health <= 0.25 ? Color.red : FlightStyle.cyan.opacity(0.7)) : .black.opacity(0.4))
+                    }
+                }.frame(height: 3)
+                    .accessibilityElement(children: .ignore).accessibilityLabel("机体耐久 \(Int(session.health * 100))%")
+                    .accessibilityIdentifier("player-health")
+                Text(String(format: "%02d", session.mission.id) + " / " + session.mission.title)
+                    .font(.system(size: 9, weight: .medium)).foregroundStyle(.white.opacity(0.5))
+                    .accessibilityIdentifier("battle-title")
+                if let bossHealth = session.bossHealth {
+                    HStack(spacing: 8) {
+                        Text(session.mission.boss).font(.system(size: 9, weight: .medium)).foregroundStyle(FlightStyle.orange)
+                        ProgressView(value: max(0, bossHealth)).tint(FlightStyle.orange).scaleEffect(y: 0.65)
+                    }.accessibilityIdentifier("boss-health")
+                }
+            }.padding(.horizontal, 68)
+        }.padding(.horizontal, 10).padding(.top, 0).padding(.bottom, 7)
+            .shadow(color: .black.opacity(0.5), radius: 3)
     }
 
     private var pausePanel: some View {
-        ZStack {
-            FlightStyle.ink.opacity(0.88).ignoresSafeArea()
-            VStack(spacing: 20) {
-                Text("FLIGHT PAUSED").font(.system(size: 10, weight: .medium, design: .monospaced)).tracking(4).foregroundStyle(FlightStyle.cyan)
-                Text("等待你的指令").font(.system(size: 27, weight: .bold))
-                Text("战斗已暂停，准备好后继续。").font(.system(size: 13)).foregroundStyle(FlightStyle.muted)
-                Button("继续飞行") { session.pause(false) }.buttonStyle(FlightButtonStyle(primary: true)).accessibilityIdentifier("resume-button")
-                Toggle("林汐语音支援", isOn: Binding(get: { store.pilot.voiceSupport }, set: { store.set(\.voiceSupport, to: $0) }))
-                    .tint(FlightStyle.cyan).accessibilityIdentifier("voice-toggle")
-                Text(session.voice.speaking ? "语音通讯中" : "语音已停止").font(.caption).foregroundStyle(FlightStyle.muted).accessibilityIdentifier("voice-status")
-                Button("通讯记录与战术") { showRadioLog = true }.buttonStyle(FlightButtonStyle()).accessibilityIdentifier("open-radio-log")
-                Button("撤离战区") { confirmRetreat = true }.buttonStyle(FlightButtonStyle()).accessibilityIdentifier("retreat-button")
-            }.frame(maxWidth: 300).padding(24)
+        GeometryReader { geo in
+            ZStack {
+                RadarBackdrop(continents: false).ignoresSafeArea()
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 12) {
+                        Text("关 \(String(format: "%02d", session.mission.id))").font(.system(size: 30, weight: .light))
+                        Text("暂停").font(.system(size: 16, weight: .light))
+                    }.foregroundStyle(FlightStyle.orange)
+                    Text(session.mission.title).font(.system(size: 13)).foregroundStyle(FlightStyle.muted)
+                    Rectangle().fill(FlightStyle.radarLine).frame(height: 1)
+                    Label("击败战区指挥官", systemImage: "circle")
+                    Label("救援 \(session.rescued) / 3", systemImage: session.rescued >= 3 ? "checkmark.circle" : "circle")
+                    Label("机体耐久 \(Int(session.health * 100))%", systemImage: "heart")
+                    Rectangle().fill(FlightStyle.radarLine).frame(height: 1)
+                    Toggle("林汐语音支援", isOn: Binding(get: { store.pilot.voiceSupport }, set: { store.set(\.voiceSupport, to: $0) }))
+                        .tint(FlightStyle.cyan).accessibilityIdentifier("voice-toggle")
+                    Text(session.voice.speaking ? "语音通讯中" : "语音已停止").font(.system(size: 10)).accessibilityIdentifier("voice-status")
+                    Button { showRadioLog = true } label: {
+                        Label("通讯记录与战术", systemImage: "waveform").frame(minHeight: 44)
+                    }.foregroundStyle(FlightStyle.cyan).accessibilityIdentifier("open-radio-log")
+                }.font(.system(size: 15, weight: .light)).foregroundStyle(FlightStyle.muted)
+                    .frame(width: geo.size.width * 0.76)
+                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.40)
+                Button { session.pause(false) } label: { LaunchCircle(title: "RESUME", subtitle: "继续飞行") }
+                    .accessibilityIdentifier("resume-button")
+                    .position(x: geo.size.width * 0.5, y: geo.size.height * 0.86)
+                Button { confirmRetreat = true } label: { RoundControl(symbol: "chevron.left.2", size: 44) }
+                    .accessibilityLabel("撤离战区").accessibilityIdentifier("retreat-button")
+                    .position(x: geo.size.width * 0.16, y: geo.size.height * 0.86)
+            }.buttonStyle(.plain)
         }
     }
 
@@ -295,6 +301,31 @@ struct DamageVignette: View {
             context.fill(Path(CGRect(x: 0, y: 0, width: 1, height: 1)), with: .radialGradient(
                 Gradient(stops: [.init(color: .clear, location: 0.65), .init(color: tint.opacity(strength * 0.28), location: 0.85), .init(color: tint.opacity(strength), location: 1)]),
                 center: CGPoint(x: 0.5, y: 0.5), startRadius: 0, endRadius: 0.71))
+        }
+    }
+}
+
+
+/// Seven-segment readout of the actual sortie currency, with no invented score economy.
+struct DigitalReadout: View {
+    let value: Int
+    private let masks = [0x3f, 0x06, 0x5b, 0x4f, 0x66, 0x6d, 0x7d, 0x07, 0x7f, 0x6f]
+    var body: some View {
+        Canvas { context, size in
+            let digits = String(format: "%09d", min(999_999_999, max(0, value))).compactMap { $0.wholeNumberValue }
+            let unit = min(size.width / 70, size.height / 9)
+            let totalWidth = 70 * unit
+            for (index, digit) in digits.enumerated() {
+                let x = (size.width - totalWidth) / 2 + CGFloat(index * 7 + index / 3 * 3) * unit
+                let segments = [CGRect(x: 1, y: 0, width: 4, height: 1), CGRect(x: 5, y: 1, width: 1, height: 3),
+                                CGRect(x: 5, y: 5, width: 1, height: 3), CGRect(x: 1, y: 8, width: 4, height: 1),
+                                CGRect(x: 0, y: 5, width: 1, height: 3), CGRect(x: 0, y: 1, width: 1, height: 3),
+                                CGRect(x: 1, y: 4, width: 4, height: 1)]
+                for (segment, rect) in segments.enumerated() {
+                    let r = CGRect(x: x + rect.minX * unit, y: rect.minY * unit, width: rect.width * unit, height: rect.height * unit)
+                    context.fill(Path(r), with: .color(.white.opacity(masks[digit] & (1 << segment) != 0 ? 0.65 : 0.04)))
+                }
+            }
         }
     }
 }

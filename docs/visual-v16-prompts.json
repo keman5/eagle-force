@@ -1,0 +1,68 @@
+{
+  "tool": "built-in image_gen",
+  "assets": [
+    {
+      "name": "Surface-ocean-v16",
+      "prompt": "Use case: stylized-concept. Production seamless repeating ocean albedo texture for a premium top-down aerial combat game. Square canvas filled edge to edge with dark deep navy seawater viewed EXACTLY straight down from 200 meters. Large uneven patches of navy calm water alternating with organic irregular broken silver blue wavelets and sparse small whitecaps, realistic fine wind streaks and depth variation. Dark muted blue photographic quality, not turquoise, not a uniform noise field, not cellular or reptile patterns, no islands, no boats, no coastline, no objects, no horizon, no perspective. Seamless repeat on all edges, even lighting, no vignette. Fine details must remain subtle so bright bullets stand out.",
+      "transparent_background": false,
+      "asset": "Resources/Assets.xcassets/Surface-ocean-v16.imageset/art.png",
+      "sha256": "c48ba287e66b301e36037c09747485fa33f7e6e8dba663b9651a34ed6686aac4"
+    },
+    {
+      "name": "Ship-scout-v16",
+      "prompt": "Use case: stylized-concept. One original enemy scout attack plane for premium iOS top-down aerial combat game, transparent square canvas. Exact orthographic TOP DOWN plan view, nose UP, bilateral symmetry. Short blunt nose, compact central fuselage, broad straight tapered wings, two narrow wing-mounted gun pods, small horizontal tail stabilizers, single central rear engine. Worn ochre yellow paint, dark gunmetal panel joints, steel wing edges, dark blue glass cockpit. Readable solid aircraft silhouette like a tough small military aircraft, not a long sci-fi dart. Detailed realistic 3D render with subtle relief and light upper left. Aircraft occupies 85 percent square width and 85 percent height, centered. No markings, no text, no logo, no ground shadow, no flames, no glow, no background. Original design.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Ship-scout-v16.imageset/art.png",
+      "sha256": "86f723904a0a9656e4fd8e72cbea738a8baf9a11ba8cf18818abbbb411c3efba"
+    },
+    {
+      "name": "Ship-armored-v16",
+      "prompt": "Use case: stylized-concept. One original heavy enemy bomber for premium iOS top-down aerial shooter, transparent square canvas. Exact orthographic TOP DOWN plan view, nose straight UP, symmetric. Broad squat four-engine industrial attack bomber, rounded armored blunt nose, wide thick angular straight wings, four separate cylindrical engine nacelles set along wings with black intakes at front, short twin tail fins. Desaturated military olive green armor, chipped pale steel edges, brass warning panels, black recessed vents, small smoky glass cockpit and dorsal turret. Complex believable physical structure, highly readable compact bulky silhouette, width equals length. Premium realistic 3D render with lighting upper left, centered with 8 percent transparent margin. No flames, no ground shadow, no text, no logos, no halo. Entire silhouette visible. Original design.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Ship-armored-v16.imageset/art.png",
+      "sha256": "5142e7fa0273f1161d79ec4507db1c3203401afde9667f1e8836e4b7ee4babfd"
+    },
+    {
+      "name": "Island-v16",
+      "prompt": "Use case: stylized-concept. Production terrain asset for original premium top-down aerial shooter: one small rugged elongated rocky sea island, TRUE transparent background. EXACT orthographic TOP DOWN, no perspective or horizon. Asymmetric natural cluster of sharp pale grey limestone crags and fractured stone slabs, dark shaded crevices, small olive moss patches. Central high crags taper to low weathered shingle shelves then wet beige pebbles and irregular thin white broken surf around the coastline. Very narrow muted teal shallows fading smoothly to transparency around outer edges. Island long axis vertical, occupies 70 percent canvas width and 90 percent height. Rich believable realistic 3D game environmental render, sunlight upper left, soft local occlusion. NOT rounded potato rocks, NOT a cone, no trees, no structures, no text, no objects. Isolated island with foam edge and transparent surrounding sea, premium physically grounded materials. Square canvas. Original environment asset.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Island-v16.imageset/art.png",
+      "sha256": "24ae0ab5f57a9e6127e6484cd4ef923a1266ed665e9e6844a24df173dfeb9d92"
+    },
+    {
+      "name": "Supply-v16",
+      "prompt": "Use case: stylized-concept. Original premium military science fiction top-down shooter production prop. One compact rounded rectangular field supply canister, exact orthographic TOP DOWN view, symmetric, true transparent background. Worn olive grey steel rounded corner case, orange reinforced corner guards, two silver latches, a dark recessed blank square central plate for a small game symbol to be added later. Thin ribbing and useful seams. Physically grounded detailed 3D game render, light upper left, restrained contrast. No glowing neon, no icons, no text, no letters, no logo, no ground shadow. Case fits centered 85 percent of square canvas, width equals height. Real military equipment, not toy or UI button.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Supply-v16.imageset/art.png",
+      "sha256": "aadeec23b9355ebf848a214643e104f88e57eb9175656268261e2e6bc1c3e649"
+    },
+    {
+      "name": "Pilot-v16",
+      "prompt": "Use case: stylized-concept. Original top-down military shooter rescue character production asset. TRUE transparent square canvas. EXACT OVERHEAD camera looking down vertically at a small stranded aircrew person standing on ground, head toward top of canvas feet toward bottom. Realistic human proportions, compact orange rescue flight suit, olive harness, small round white flight helmet with narrow dark visor, dark gloves and boots, one arm raised out to side signaling aircraft, other arm extended slightly. Upper shoulders and helmet visible from above, foreshortened torso and legs as viewed vertically from sky, NOT front view, NOT chibi, NOT big head cartoon, NOT mascot. Premium detailed realistic 3D game render, light upper left. No platform, no shadow on background, no speech bubble, no text, no logos, no scenery. Centered with margin, clear small silhouette.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Pilot-v16.imageset/art.png",
+      "sha256": "dde3c5b4d47326b655c17fe6018a2d639662876f4601ff39a75cbf4c372e2d1d"
+    },
+    {
+      "name": "Ship-interceptor-v16",
+      "prompt": "Use case: stylized-concept. One original enemy INTERCEPTOR aircraft production asset for premium iOS military science fiction aerial shooter. TRUE transparent square background. Exact orthographic TOP DOWN plan view, nose straight UP, bilateral symmetry. Sleek compact twin-engine aircraft, needle nose, sharply swept back angular wings, two external jet nacelles, short split tail, exposed wingtip cannons. Dark burnt red paint on gunmetal, pale steel wing edges, thin cream caution stripes with no lettering, narrow smoked blue canopy. Premium realistic 3D game render with intricate functional paneling and wear. Strong clearly distinct swept wing silhouette, occupies 90 percent of square, lighting upper left. No ground shadow, no exhaust glow, no text, no logos. Entire aircraft visible, ORIGINAL design.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Ship-interceptor-v16.imageset/art.png",
+      "sha256": "68ef6b91ca827787cef13c3e9d38d66f32b16f20ac9aa56bf487b4e562c455dc"
+    },
+    {
+      "name": "Turret-v16",
+      "prompt": "Use case: stylized-concept. One original military science fiction twin anti-air gun turret, isolated TRUE transparent square background. Exact orthographic TOP DOWN plan view, twin long parallel barrels pointing straight UP. Squat round armored turret housing, exposed recoil cylinders, two gunmetal barrels, worn desaturated olive and steel plating, tiny amber warning panels. Compact octagonal mechanical mounting base underneath with bolts and dark gaps. Ground defense prop for premium aerial combat game, realistic dense 3D render lighting upper left, very readable at 100px. Original design, no neon lights, no text, no logo, no ground shadow, no environment. Centered entire object within square with small margin.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Turret-v16.imageset/art.png",
+      "sha256": "f9ff0302433c26cd6ed96a10c926587d6cc4b95343857151126fd50a3b9cdc09"
+    },
+    {
+      "name": "Tank-v16",
+      "prompt": "Use case: stylized-concept. One original light military armored tank, isolated TRUE transparent square background. Exact orthographic TOP DOWN plan view, front and cannon pointing straight UP. Long articulated dark rubber caterpillar tracks either side of compact olive green armored chassis, squat octagonal turret, single narrow gun barrel, small exhaust grille at rear, pale chipped edges, detailed tread links, worn steel plates and bolts, small ochre warning markings without words. Premium realistic 3D game render for a top down aerial shooter, light upper left, complete centered silhouette readable small. No text, no logos, no glow, no ground shadow, no scenery. Original design with 8 percent margin around entire object.",
+      "transparent_background": true,
+      "asset": "Resources/Assets.xcassets/Tank-v16.imageset/art.png",
+      "sha256": "8e380fca12b676f6d12e91c9ba26dfac756e4b276daf9383f2312c0e1ee36033"
+    }
+  ]
+}

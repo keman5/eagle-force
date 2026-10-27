@@ -1,0 +1,21 @@
+{
+  "tool": "built-in image_gen",
+  "date": "2026-10-27",
+  "assets": [
+    {
+      "name": "Ship-player-v15",
+      "prompt": "Use case: stylized-concept. Asset type: production aircraft albedo illustration for an original premium iOS vertical shooter, transparent background. One ORIGINAL compact chunky crimson red industrial twin-engine fighter, viewed in exact orthographic TOP DOWN plan, nose straight UP. Wide stubby trapezoid wings, short blunt central fuselage, two thick cylindrical engine nacelles aligned vertically on either side of dark smoked blue cockpit, two small gun barrels at forward wing tips. Short swept tail fins. Symmetric, compact roughly square overall silhouette, NOT a long pointed delta jet. Weathered painted red armor, gunmetal recessed vents, fine panel seams, small silver edge chips and tiny warm yellow caution markings. Realistically modeled premium 3D game render, restrained lighting from upper left, clearly readable at 80 pixels. Engine nozzles at bottom with pale ice blue inner cores, NO trails or flames outside hull. One centered object occupying 88% of a square canvas with margin on all sides. No shadow on ground, no scenery, no text, no insignia, no outer halo, no logos, no watermark, no existing franchise design. True transparent background.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-f07a5ac2-a32d-4465-a5d6-414179f5a723.png"
+    },
+    {
+      "name": "Surface-rock",
+      "prompt": "Use case: stylized-concept. Asset type: seamless PBR diffuse stone material tile for real 3D rocks in a premium iOS aerial combat game. Entire square canvas filled by continuous fine-grained weathered grey limestone and dark slate rock surface, natural irregular fractured polygonal plates, mineral striations, hairline fissures, mottled salt deposits and small patches of olive moss. High quality photorealistic rock material, grey neutral with restrained warm olive details. Flat orthographic surface scan, diffuse even lighting, no perspective, no large cast shadows, no objects, no scenery, no lettering or borders. Medium-scale detail with fine microtexture, avoid a giant central crack or obvious focal point. Tileable at all four edges. This image is mapped across 3D boulders, not used as a scene background. Opaque square.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-f77f3c39-4541-4d70-b501-c92770a078d0.png"
+    },
+    {
+      "name": "Surface-metal",
+      "prompt": "Use case: stylized-concept. Asset type: seamless metal armor diffuse material texture for original real-time 3D game models. Entire square filled with matte dark grey gunmetal armored panel surface, fine utilitarian steel plates in irregular interlocking rectangular sizes, thin recessed dark seams, small inset hex bolts, subtle machined vents and very restrained scuffed pale edges. Premium realistic industrial sci-fi material, purely neutral dark medium grey, no bright highlights, no color lights, no symbols, no words. Even diffuse lighting, exact orthographic front-on surface scan with no perspective and no large cast shadows. Seamlessly repeating all four edges. Designed as a reusable albedo texture mapped on tank armor, battleship plating and docks. No individual object, no border, no background, no watermark.",
+      "source": "/Users/kevin/.codex/generated_images/01a173b9-eee6-7071-980e-c58b4dfa3a26/exec-00bc3ea5-9445-46a1-9e1a-0cf6307bb980.png"
+    }
+  ]
+}

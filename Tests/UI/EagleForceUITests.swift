@@ -29,6 +29,10 @@ final class EagleForceUITests: XCTestCase {
         waitForExpectations(timeout: 5)
         XCTAssertTrue(app.buttons["mission-2"].isEnabled)
         capture("10-next-mission-selected")
+        app.buttons["mission-1"].tap()
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "objective-clear").firstMatch.label.contains("勋章已获得"))
+        XCTAssertTrue(app.staticTexts["已领取"].exists)
+        app.buttons["mission-2"].tap()
         launch.tap()
         XCTAssertTrue(app.staticTexts["battle-title"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["battle-title"].label.contains("霓虹港湾"))
@@ -64,10 +68,11 @@ final class EagleForceUITests: XCTestCase {
         app.launchArguments = ["-ui-testing", "-skip-intro"]
         app.launch()
         XCTAssertTrue(app.buttons["open-hangar"].waitForExistence(timeout: 15))
-        XCTAssertTrue(app.staticTexts["苍穹突击"].exists)
+        XCTAssertEqual(app.staticTexts["selected-mission"].label, "碧潮群岛")
         XCTAssertFalse(app.buttons["tab-0"].exists)
         XCTAssertTrue(app.buttons["open-profile"].isHittable)
         XCTAssertTrue(app.buttons["launch-mission"].isHittable)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "objective-rescue").firstMatch.label.contains("首次 +100"))
         capture("01-campaign")
         app.buttons["open-hangar"].tap()
         let upgrade = app.buttons["upgrade-weapon"]
@@ -82,6 +87,7 @@ final class EagleForceUITests: XCTestCase {
         if !launch.isHittable { app.swipeUp() }
         launch.tap()
         XCTAssertTrue(app.buttons["pause-button"].waitForExistence(timeout: 10))
+        capture("00-battle-hud")
         let speed = app.buttons["game-speed"]
         speed.tap()
         XCTAssertTrue(speed.label.contains("1.5"))
@@ -136,6 +142,7 @@ final class EagleForceUITests: XCTestCase {
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "damage-vignette").firstMatch.label, "红色低血量晕影")
         XCTAssertTrue(app.staticTexts["rescue-hint"].exists)
         capture("07-critical-obstacles-supplies")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
         let crash = app.staticTexts["crash-state"]
         XCTAssertTrue(crash.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["emp-button"].isEnabled)
@@ -267,6 +274,29 @@ final class EagleForceUITests: XCTestCase {
                 app.terminate()
             }
         }
+    }
+
+    @MainActor func testReducedEffectsStillRendersHorizontalCombat() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-skip-intro", "-unlock-missions"]
+        app.launch()
+        app.buttons["open-profile"].tap()
+        let toggle = app.switches["降低动态效果"]
+        if !toggle.isHittable { app.swipeUp() }
+        toggle.tap()
+        XCTAssertEqual(toggle.value as? String, "1")
+        app.buttons["return-map"].tap()
+        app.buttons["mission-4"].tap()
+        app.buttons["launch-mission"].tap()
+        let surface = app.descendants(matching: .any).matching(identifier: "battle-surface").firstMatch
+        XCTAssertTrue(surface.waitForExistence(timeout: 15))
+        XCTAssertEqual(surface.value as? String, "3D projection aligned")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6)).press(forDuration: 3)
+        capture("reduced-effects-horizontal")
+        app.buttons["pause-button"].tap()
+        XCTAssertTrue(app.buttons["resume-button"].waitForExistence(timeout: 5))
+        app.buttons["resume-button"].tap()
+        XCTAssertTrue(surface.exists)
     }
 
     @MainActor func testFiveBossModelsAndProjection() {

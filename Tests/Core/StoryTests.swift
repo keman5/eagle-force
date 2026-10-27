@@ -51,6 +51,21 @@ import Testing
     #expect(radio.history.filter { $0.id == "opening" }.count == 1)
 }
 
+@Test func interceptorSupportAppearsOnceForAnOnscreenThreat() {
+    var radio = RadioDirector()
+    var world = GameWorld(mission: Mission.campaign[1], loadout: Loadout())
+    radio.update(world: world, delta: 0.01)
+    radio.update(world: world, delta: 30)
+    world.entities = [Entity(id: 900, kind: .interceptor, position: Vector(x: 300, y: 260), velocity: .zero,
+                             hp: 22, maxHP: 22, originX: 300)]
+    radio.update(world: world, delta: 0.01)
+    #expect(radio.current?.id == "enemy-interceptor")
+    #expect(radio.current?.text.contains("双弹") == true)
+    radio.update(world: world, delta: 30)
+    radio.update(world: world, delta: 30)
+    #expect(radio.history.filter { $0.id == "enemy-interceptor" }.count == 1)
+}
+
 @Test(arguments: [Mission.campaign[1], Mission.campaign[2]])
 func urgentLaserInterruptsAndExpiresWithoutReplaying(_ mission: Mission) {
     var radio = RadioDirector()

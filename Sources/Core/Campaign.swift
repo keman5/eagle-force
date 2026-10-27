@@ -25,6 +25,14 @@ struct Mission: Identifiable, Sendable {
 
     var axisLabel: String { axis == .vertical ? "纵向突击" : "横向穿越" }
 
+    var supplyPool: [EntityKind] {
+        [.repair, .power] + (id >= 2 ? [.shield, .spread] : [])
+            + (id >= 3 ? [.laser] : []) + (id >= 4 ? [.escort] : []) + (id >= 5 ? [.lightning] : [])
+    }
+    var newSupplyTitle: String {
+        ["维修箱 · 火力过载", "护盾 · 扇形散弹", "贯穿激光", "护航僚机", "连锁雷电"][id - 1]
+    }
+
     static let campaign: [Mission] = [
         Mission(id: 1, title: "碧潮群岛", subtitle: "TIDAL FRONTIER", axis: .vertical, biome: .ocean,
                 boss: "潮汐守卫", briefing: "穿越礁岛防线，接回 3 名失联飞行员。瞄准弹发射后再侧移，留一次 EMP 给守卫。",
@@ -46,7 +54,7 @@ struct Mission: Identifiable, Sendable {
     private static func waves(_ formations: [Formation], spacing: Double, armorFrom: Int) -> [Wave] {
         formations.enumerated().map { index, formation in
             Wave(time: 4 + Double(index) * spacing, formation: formation,
-                 count: formation == .wall ? 5 : 4, armored: index >= armorFrom && index.isMultiple(of: 2))
+                 count: index < 2 ? 3 : formation == .wall ? 5 : 4, armored: index >= armorFrom && index.isMultiple(of: 2))
         }
     }
 }

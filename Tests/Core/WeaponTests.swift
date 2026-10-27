@@ -129,21 +129,19 @@ func escortsCapAtThreeRewardExtrasAndStayInBounds(_ mission: Mission) {
     #expect(world.entities.isEmpty)
 }
 
-@Test func newSuppliesAreReachableWithoutReplacingRepairShieldOrPower() {
-    var world = GameWorld(mission: Mission.campaign[0], loadout: Loadout())
+@Test func allSuppliesRemainReachableAcrossTheFiveMissionProgression() {
     var drops: Set<String> = []
-    for kill in 1...18 {
-        world.entities = [combatEntity(.scout, id: 500 + kill, at: Vector(x: 195, y: 500), hp: 0)]
-        world.step(1.0 / 120)
-        drops.formUnion(world.entities.filter { $0.kind.isPickup }.map { $0.kind.rawValue })
+    for mission in Mission.campaign {
+        var world = GameWorld(mission: mission, loadout: Loadout())
+        world.health = 50; world.invincibleUntil = .infinity
+        for time in [32.0, 56.0, 80.0] {
+            world.elapsed = time
+            world.entities = (500..<508).map { combatEntity(.scout, id: $0, at: Vector(x: 70, y: 300), hp: 0) }
+            world.step(1.0 / 120)
+            drops.formUnion(world.entities.filter { $0.kind.isSupply }.map { $0.kind.rawValue })
+        }
     }
-    #expect(Set(["laser", "spread", "lightning", "repair", "shield", "power"]).isSubset(of: drops))
-    for time in [12.0, 36.0, 60.0, 84.0] {
-        world.entities.removeAll()
-        world.elapsed = time
-        world.step(1.0 / 120)
-        #expect(world.entities.filter { $0.kind == .escort }.count == 1)
-    }
+    #expect(drops == Set(["laser", "spread", "lightning", "repair", "shield", "power", "escort"]))
 }
 
 @Test func weaponSupportUsesLiveEquipmentAndDoesNotRepeatOrQueueExpiredAdvice() throws {

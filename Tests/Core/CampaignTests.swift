@@ -390,6 +390,8 @@ func enemyMotionDisplacesAndPreservesOrderedFormations(_ formation: Formation) {
 }
 
 @Test func originalAudioProducesValidNonSilentPCMWithoutClipping() {
+    #expect(AudioScore.wav("rescue") != AudioScore.wav("pickup"))
+    #expect(AudioScore.wav("supply") != AudioScore.wav("pickup"))
     for name in AudioScore.effects + ["music"] {
         let bytes = [UInt8](AudioScore.wav(name))
         #expect(String(bytes: bytes[0..<4], encoding: .utf8) == "RIFF")
@@ -422,7 +424,7 @@ func ordinaryEnemiesTakeAtMostThreeHits(mission: Mission) throws {
         timeline.entities = []
         timeline.elapsed = wave.time
         timeline.step(0.001)
-        let enemies = timeline.entities.filter { $0.kind == .scout || $0.kind == .armored }
+        let enemies = timeline.entities.filter { $0.kind.isEnemy && $0.kind != .boss }
         #expect(!enemies.isEmpty)
         for enemy in enemies {
             kinds.insert(enemy.kind)
@@ -441,13 +443,13 @@ func ordinaryEnemiesTakeAtMostThreeHits(mission: Mission) throws {
                 #expect(hits <= 3)
                 #expect(!combat.entities.contains { $0.id == target.id })
                 if damage <= 11 {
-                    let expected = enemy.kind == .scout ? [1, 1, 2, 2, 3][mission.id - 1] : [1, 2, 2, 3, 3][mission.id - 1]
+                    let expected = enemy.kind == .armored ? [1, 2, 2, 3, 3][mission.id - 1] : [1, 1, 2, 2, 3][mission.id - 1]
                     #expect(hits == expected)
                 }
             }
         }
     }
-    #expect(kinds == [.scout, .armored])
+    #expect(kinds == (mission.id == 1 ? [.scout, .armored] : [.scout, .armored, .interceptor]))
 }
 
 @Test func weakShotsKeepTheirDamageAgainstBossesAndObstacles() throws {
@@ -462,7 +464,7 @@ func ordinaryEnemiesTakeAtMostThreeHits(mission: Mission) throws {
 
 
 @Test(arguments: Mission.campaign)
-func powerPickupBringsTargetsIntoViewBeforeBoostExpires(_ mission: Mission) {
+func powerPickupDoesNotConsumeFutureWavesEarly(_ mission: Mission) {
     var world = GameWorld(mission: mission, loadout: Loadout())
     world.invincibleUntil = .infinity
     world.elapsed = 4
@@ -473,16 +475,12 @@ func powerPickupBringsTargetsIntoViewBeforeBoostExpires(_ mission: Mission) {
     world.step(1.0 / 120)
     let collectedAt = world.elapsed
     #expect(world.overdriveUntil > collectedAt)
-    var firstTargetAt: Double?
     for _ in 0..<360 {
         world.advance(1.0 / 120, speed: 1)
-        if world.entities.contains(where: { $0.kind.isEnemy && $0.position.y < world.length - 20 && $0.position.y > world.player.y + 40 }) {
-            firstTargetAt = world.elapsed
-            break
-        }
+        #expect(world.waveNumber == 1)
     }
-    #expect(firstTargetAt != nil)
-    #expect((firstTargetAt ?? .infinity) - collectedAt < 3)
+    world.elapsed = mission.waves[1].time
+    world.step(0.001)
     #expect(world.waveNumber == 2)
 }
 
@@ -494,18 +492,18 @@ func dynamicDensityIsBoundedAndStopsBeforeBoss(_ mission: Mission) {
     var lastSeen = 0.0
     for _ in 0..<Int(mission.bossTime * 60) {
         world.step(1.0 / 60)
-        let aircraft = world.entities.filter { $0.kind == .scout || $0.kind == .armored }
-        #expect(aircraft.count <= 9)
+        let aircraft = world.entities.filter { $0.kind.isEnemy && $0.kind != .boss }
+        #expect(aircraft.count <= 8)
         if !aircraft.isEmpty { lastSeen = world.elapsed }
-        // Fast clears exhaust the authored waves, then exercise late-mission reinforcements.
-        world.entities.removeAll { $0.kind == .scout || $0.kind == .armored || $0.kind == .hostile }
+        // Fast clears must preserve the authored pauses and final approach to the boss.
+        world.entities.removeAll { ($0.kind.isEnemy && $0.kind != .boss) || $0.kind == .hostile }
         _ = world.drainEffects()
     }
     #expect(world.waveNumber == mission.waves.count)
-    #expect(lastSeen > mission.bossTime - 7)
+    #expect(abs(lastSeen - (mission.waves.last?.time ?? 0)) < 0.05)
     #expect(lastSeen < mission.bossTime - 4)
     for _ in 0..<600 { world.step(1.0 / 60) }
-    #expect(!world.entities.contains { $0.kind == .scout || $0.kind == .armored })
+    #expect(!world.entities.contains { $0.kind.isEnemy && $0.kind != .boss })
 }
 
 @Test func incomingFormationCountsTowardDensityCap() {
@@ -518,15 +516,103 @@ func dynamicDensityIsBoundedAndStopsBeforeBoss(_ mission: Mission) {
 }
 
 @Test(arguments: Mission.campaign)
+func supplyPacingUnlocksOnlyOneCrateAfterTheOpening(_ mission: Mission) throws {
+    var world = GameWorld(mission: mission, loadout: Loadout())
+    world.invincibleUntil = .infinity
+    let point = Vector(x: 70, y: world.length - 110)
+    world.elapsed = 12
+    world.entities = (900..<924).map { entity(.scout, id: $0, at: point, hp: 0) }
+    world.step(0.001)
+    #expect(!world.entities.contains { $0.kind.isSupply })
+    world.elapsed = 28
+    world.entities = (930..<954).map { entity(.scout, id: $0, at: point, hp: 0) }
+    world.step(0.001)
+    let first = try #require(world.entities.first { $0.kind.isSupply })
+    #expect(first.kind == [EntityKind.power, .spread, .laser, .escort, .lightning][mission.id - 1])
+    #expect(world.entities.filter { $0.kind.isSupply }.count == 1)
+    world.elapsed = 49
+    world.entities = (960..<984).map { entity(.scout, id: $0, at: point, hp: 0) }
+    world.step(0.001)
+    #expect(!world.entities.contains { $0.kind.isSupply })
+    world.elapsed = 51
+    world.entities = [first] + (990..<1014).map { entity(.scout, id: $0, at: point, hp: 0) }
+    world.step(0.001)
+    #expect(world.entities.filter { $0.kind.isSupply }.map(\.id) == [first.id])
+    world.elapsed = 52
+    world.entities = [entity(.scout, id: 1020, at: point, hp: 0)]
+    world.step(0.001)
+    #expect(world.entities.filter { $0.kind.isSupply }.count == 1)
+    #expect(!world.entities.contains { $0.kind == .repair }) // Healthy pilots do not receive wasted repair kits.
+    let locked: Set<EntityKind> = switch mission.id {
+    case 1: [.shield, .spread, .laser, .escort, .lightning]
+    case 2: [.laser, .escort, .lightning]
+    case 3: [.escort, .lightning]
+    case 4: [.lightning]
+    default: []
+    }
+    #expect(Set(mission.supplyPool).isDisjoint(with: locked))
+}
+
+@Test(arguments: Mission.campaign)
+func openingFormationHasRoomBetweenAircraft(_ mission: Mission) {
+    var world = GameWorld(mission: mission, loadout: Loadout())
+    world.elapsed = 4
+    world.step(0.001)
+    let aircraft = world.entities.filter { $0.kind.isEnemy }
+    #expect(aircraft.count == 3)
+    for a in aircraft { for b in aircraft where a.id != b.id {
+        #expect((a.position - b.position).length > a.radius + b.radius + 20)
+    } }
+}
+
+@Test(arguments: Mission.campaign)
+func screenEdgeKillsDoNotSpendTheSupplyOpportunity(_ mission: Mission) {
+    var world = GameWorld(mission: mission, loadout: Loadout())
+    world.invincibleUntil = .infinity
+    world.elapsed = 28
+    for point in [Vector(x: -30, y: 200), Vector(x: world.width + 30, y: 200),
+                  Vector(x: 70, y: -30), Vector(x: 70, y: world.length + 80)] {
+        world.entities = (900..<908).map { entity(.scout, id: $0, at: point, hp: 10) }
+        world.empCharges = 1
+        world.pulse()
+        #expect(!world.entities.contains { $0.kind.isSupply })
+    }
+    world.entities = [entity(.scout, id: 920, at: Vector(x: 70, y: world.length - 110), hp: 10)]
+    world.empCharges = 1
+    world.pulse()
+    #expect(world.entities.filter { $0.kind.isSupply }.map(\.kind) == [mission.supplyPool.last!])
+}
+
+@Test(arguments: Mission.campaign)
+func suppliesRequireEightFreshKillsAndOfferRepairsOnlyWhenHurt(_ mission: Mission) {
+    var world = GameWorld(mission: mission, loadout: Loadout())
+    world.invincibleUntil = .infinity
+    let point = Vector(x: 70, y: world.length - 110)
+    world.elapsed = 28
+    world.entities = (900..<908).map { entity(.scout, id: $0, at: point, hp: 0) }
+    world.step(0.001)
+    #expect(world.entities.filter { $0.kind.isSupply }.count == 1)
+    world.elapsed = 51
+    world.health = 30
+    world.entities = (910..<917).map { entity(.scout, id: $0, at: point, hp: 0) }
+    world.step(0.001)
+    #expect(!world.entities.contains { $0.kind.isSupply })
+    world.entities = [entity(.scout, id: 920, at: point, hp: 0)]
+    world.step(0.001)
+    #expect(world.entities.filter { $0.kind.isSupply }.count == 1)
+    if mission.id == 1 { #expect(world.entities.contains { $0.kind == .repair }) }
+}
+
+@Test(arguments: Mission.campaign)
 func ordinaryAndGroundEnemyProjectilesAreFiftyPercentFaster(_ mission: Mission) {
-    for kind in [EntityKind.scout, .armored, .obstacle] {
+    for kind in [EntityKind.scout, .armored, .interceptor, .obstacle] {
         var world = GameWorld(mission: mission, loadout: Loadout())
         var enemy = entity(kind, id: 900, at: Vector(x: 70, y: world.length - 80), hp: 100)
         enemy.fireAt = 0
         world.entities = [enemy]
         world.step(1.0 / 120)
         let shots = world.entities.filter { $0.kind == .hostile }
-        #expect(shots.count == 1)
+        #expect(shots.count == (kind == .armored ? 3 : kind == .scout ? 1 : 2))
         #expect(shots.allSatisfy { abs($0.velocity.length - (90 + Double(mission.id) * 7) * world.flightScale * 1.5) < 0.00001 })
         #expect((shots.first?.velocity.y ?? 0) < 0)
     }
@@ -534,7 +620,7 @@ func ordinaryAndGroundEnemyProjectilesAreFiftyPercentFaster(_ mission: Mission) 
 
 @Test(arguments: Mission.campaign)
 func passedEnemiesStopFiringWithoutDeletingExistingShots(_ mission: Mission) throws {
-    for kind in [EntityKind.scout, .armored, .boss, .obstacle] {
+    for kind in [EntityKind.scout, .armored, .interceptor, .boss, .obstacle] {
         var world = GameWorld(mission: mission, loadout: Loadout())
         let y = world.length - (mission.axis == .vertical ? 125 : 80)
         world.player = Vector(x: world.width / 2 - 100, y: y - 80)

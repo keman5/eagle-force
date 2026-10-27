@@ -6,22 +6,22 @@ struct RadioCard: View {
     private var tint: Color { line.urgent ? FlightStyle.orange : line.speaker == .linXi ? FlightStyle.cyan : FlightStyle.orange }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 11) {
+        HStack(alignment: .top, spacing: compact ? 8 : 11) {
             Image(line.speaker.portrait).resizable().scaledToFill()
-                .frame(width: compact ? 48 : 64, height: compact ? 58 : 74).clipped()
+                .frame(width: compact ? 30 : 64, height: compact ? 38 : 74).clipped()
                 .overlay(Rectangle().stroke(tint.opacity(0.6), lineWidth: 1)).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text(line.speaker.name).font(.system(size: compact ? 12 : 14, weight: .bold))
+                    Text(line.speaker.name).font(.system(size: compact ? 10 : 14, weight: .bold))
                     Spacer(minLength: 4)
                     Text(line.urgent ? "战术警报" : line.speaker == .linXi ? "回声 / 友军频道" : "截获 / 敌军频道")
                         .font(.system(size: 9, weight: .medium))
                 }.foregroundStyle(tint)
-                Text(line.text).font(.system(size: compact ? 12 : 14)).lineSpacing(3)
+                Text(line.text).font(.system(size: compact ? 10 : 14)).lineSpacing(compact ? 1 : 3)
                     .fixedSize(horizontal: false, vertical: true).foregroundStyle(.white)
             }
-        }.padding(compact ? 10 : 14)
-            .background(FlightStyle.ink.opacity(0.94), in: RoundedRectangle(cornerRadius: 7))
+        }.padding(compact ? 6 : 14)
+            .background(FlightStyle.ink.opacity(compact ? 0.6 : 0.94), in: RoundedRectangle(cornerRadius: compact ? 0 : 7))
             .overlay(alignment: .leading) { Rectangle().fill(tint).frame(width: 2) }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier(compact ? "radio-caption" : "radio-record-\(line.id)")

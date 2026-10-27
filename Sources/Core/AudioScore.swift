@@ -1,7 +1,7 @@
 import Foundation
 
 enum AudioScore {
-    static let effects = ["shot", "pickup", "explosion", "emp", "alarm", "warning", "bossShot", "laser", "beacon", "beam", "spread", "lightning"]
+    static let effects = ["shot", "pickup", "rescue", "supply", "explosion", "emp", "alarm", "warning", "bossShot", "laser", "beacon", "beam", "spread", "lightning"]
 
     // Original synthesized score and cues; no downloaded music or external audio dependency.
     static func wav(_ name: String) -> Data {
@@ -11,6 +11,8 @@ enum AudioScore {
         case "emp": 1.1
         case "laser": 0.8
         case "warning", "beacon": 0.6
+        case "rescue": 0.7
+        case "supply": 0.38
         case "shot": 0.055
         case "beam": 0.11
         case "spread": 0.16
@@ -65,6 +67,8 @@ enum AudioScore {
                 case "bossShot": sin(tau * (170 * t - 150 * t * t)) * 0.8
                 case "beacon": sin(tau * (t < 0.3 ? 880 : 1320) * t) * 0.6
                 case "pickup": sin(tau * (1000 * t + 700 * t * t)) * 0.7
+                case "rescue": (sin(tau * 660 * t) + sin(tau * 825 * t) * min(1, t * 8) + sin(tau * 990 * t) * min(1, t * 4)) * 0.26
+                case "supply": sin(tau * (620 * t + 460 * t * t)) * 0.5 + sin(tau * 1240 * t) * 0.18
                 default: sin(tau * 850 * t * (1 - t / duration * 0.4)) * 0.7
                 }
                 waveform = tone * envelope

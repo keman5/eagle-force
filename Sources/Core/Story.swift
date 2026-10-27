@@ -115,6 +115,13 @@ struct RadioDirector {
         case .cannon: break
         }
         if world.escortCount > 0 { speak(id: "escort", text: "护航机已入队，会跟随你自动开火。本次出击最多三架。") }
+        for (kind, text) in [(EntityKind.armored, "四发重装机！三发扇形弹会封住正前方，侧移穿过弹隙再持续开火。"),
+                             (.interceptor, "红色截击机速度很快，会发射双弹。避开机头方向，别追到屏幕边缘。") ] {
+            let id = "enemy-\(kind.rawValue)"
+            if world.entities.contains(where: { $0.kind == kind && $0.position.y < world.length && $0.position.y > world.player.y }) {
+                speak(id: id, text: text)
+            } else { pending.removeAll { $0.id == id } }
+        }
         if world.elapsed >= 38 { speak(id: "route", text: "信号仍然稳定。敌机瞄准的是开火时的位置，等它射击后再移动。") }
         if world.entities.contains(where: { $0.kind == .rescue }) {
             speak(id: "sos", text: "收到金色 SOS！靠近即可接回飞行员，获得星晶和一枚 EMP。")
